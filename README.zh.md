@@ -16,7 +16,7 @@
 ## 安装
 
 ```bash
-pi install git:github.com/<you>/pi-fleet      # 或: pi install npm:pi-fleet
+pi install git:github.com/frosttrailcomply/pi-fleet      # 或: pi install npm:pi-fleet
 # 或直接加载扩展：
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```

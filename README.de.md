@@ -16,7 +16,7 @@ Alles läuft neben Pis eigenen Providern, die unverändert weiterarbeiten. pi-fl
 ## Installation
 
 ```bash
-pi install git:github.com/<you>/pi-fleet      # oder: pi install npm:pi-fleet
+pi install git:github.com/frosttrailcomply/pi-fleet      # oder: pi install npm:pi-fleet
 # oder die Erweiterung direkt laden:
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```

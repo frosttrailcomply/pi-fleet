@@ -16,7 +16,7 @@
 ## Установка
 
 ```bash
-pi install git:github.com/<you>/pi-fleet      # или: pi install npm:pi-fleet
+pi install git:github.com/frosttrailcomply/pi-fleet      # или: pi install npm:pi-fleet
 # либо подключить расширение напрямую:
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```

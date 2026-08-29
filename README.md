@@ -29,7 +29,7 @@ Everything runs alongside Pi's own providers — they keep working unchanged. pi
 ## Install
 
 ```bash
-pi install git:github.com/<you>/pi-fleet      # or: pi install npm:pi-fleet
+pi install git:github.com/frosttrailcomply/pi-fleet      # or: pi install npm:pi-fleet
 # or load the extension directly:
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```
