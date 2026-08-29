@@ -8,7 +8,15 @@ dist/
 *.sqlite
 *.sqlite-*
 data/*.json
+data/*.txt
 !data/.gitkeep
+
+# browser-search stack (cloned by scripts/setup-browser-search.mjs)
+.browser-search/
+
+# internal working notes and private prompts (not for publication)
+.prompts/
+SOLUTIONS.md
 # credentials / caches
 auth.json
 .pi/agent/auth.json

@@ -23,11 +23,18 @@
     "seeds": ["127.0.0.1:11434"],
     "defaultPorts": [11434],
     "censys": {
-      "enabled": false,
+      "enabled": true,
       "query": "host.services.software.product = \"ollama\" or web.software.product = \"ollama\"",
       "htmlImports": [],
       "apiIdEnv": "CENSYS_API_ID",
-      "apiSecretEnv": "CENSYS_API_SECRET"
+      "apiSecretEnv": "CENSYS_API_SECRET",
+      "browser": {
+        "enabled": true,
+        "command": ["node", "${PI_FLEET_DIR}/scripts/censys-camofox.mjs", "{url}"],
+        "searchUrl": "https://platform.censys.io/search?q={query}",
+        "resultPath": "",
+        "timeoutMs": 120000
+      }
     }
   },
   "moa": {
@@ -42,6 +49,14 @@
   },
   "memory": {
     "enabled": true,
+    "backend": "hindsight",
+    "fallbackToNative": true,
+    "hindsight": {
+      "baseUrl": "http://127.0.0.1:8765",
+      "apiKeyEnv": "HINDSIGHT_API_KEY",
+      "namespace": "pi-fleet",
+      "timeoutMs": 10000
+    },
     "dbPath": "",
     "topK": 5,
     "minScore": 0.15

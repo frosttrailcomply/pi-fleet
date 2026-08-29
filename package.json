@@ -14,7 +14,9 @@
     "test": "node --experimental-sqlite --test --import tsx test/*.test.ts",
     "test:e2e": "node --experimental-sqlite --test --import tsx test/e2e.test.ts",
     "typecheck": "tsc --noEmit",
-    "fleetctl": "tsx src/cli/fleetctl.ts"
+    "fleetctl": "tsx src/cli/fleetctl.ts",
+    "setup:browser-search": "node scripts/setup-browser-search.mjs",
+    "postinstall": "node scripts/setup-browser-search.mjs --code-only"
   },
   "pi": {
     "extensions": [

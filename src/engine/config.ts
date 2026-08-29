@@ -33,11 +33,14 @@ export const DEFAULT_CONFIG: FleetConfig = {
       apiSecretEnv: "CENSYS_API_SECRET",
       browser: {
         enabled: true,
-        // Default: browser-search smart-extract (CloakBrowser) rendering the DOM.
-        // $BROWSER_SEARCH_DIR points at a cloned github.com/Johell1NS/browser-search.
-        command: ["node", "${BROWSER_SEARCH_DIR}/scripts/smart-extract.mjs", "{url}", "--expr", "document.documentElement.outerHTML"],
+        // Default: pi-fleet's Camofox scraper, which drives the browser-search
+        // Camofox (camoufox) service, waits for the result anchors to render,
+        // and prints the full HTML. Requires the Camofox container running and
+        // CAMOFOX_API_KEY set (see scripts/setup-browser-search.mjs). PI_FLEET_DIR
+        // is set by the extension/CLI to this package's root.
+        command: ["node", "${PI_FLEET_DIR}/scripts/censys-camofox.mjs", "{url}"],
         searchUrl: "https://platform.censys.io/search?q={query}",
-        resultPath: "results.0.content",
+        resultPath: "",
         timeoutMs: 120_000,
       },
     },

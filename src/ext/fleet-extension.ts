@@ -3,14 +3,20 @@
 // lifecycle hooks. All substantive logic lives in the (pi-independent, tested)
 // engine; this file only translates between pi's API and the orchestrator.
 
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { PiExtensionAPI, PiEventCtx, PiCommandCtx } from "./pi-types.ts";
 import { loadConfig } from "../engine/config.ts";
 import { FleetOrchestrator } from "../engine/orchestrator.ts";
 import { FleetGateway } from "./gateway.ts";
 
 const PROVIDER = "fleet";
+// Package root (…/src/ext → …). Lets the default browser-scrape command resolve
+// ${PI_FLEET_DIR}/scripts/censys-camofox.mjs.
+const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> {
+  if (!process.env.PI_FLEET_DIR) process.env.PI_FLEET_DIR = PKG_ROOT;
   const configPath = process.env.PI_FLEET_CONFIG;
   const cfg = loadConfig(configPath);
   // pi surfaces a provider's models only when its apiKey resolves via an env var

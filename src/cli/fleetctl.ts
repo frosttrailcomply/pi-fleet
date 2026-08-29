@@ -9,9 +9,14 @@
 //   fleetctl chat <text>           route one prompt through the fleet
 //   fleetctl memory                list stored lessons
 
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "../engine/config.ts";
 import { FleetOrchestrator } from "../engine/orchestrator.ts";
 import { extractFromFiles } from "../engine/discovery/censys.ts";
+
+// Package root (…/src/cli → …) so ${PI_FLEET_DIR} resolves in the default scrape command.
+if (!process.env.PI_FLEET_DIR) process.env.PI_FLEET_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function printStatus(orch: FleetOrchestrator): void {
   const s = orch.status();

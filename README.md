@@ -1,75 +1,104 @@
+<!-- Language: English · [Русский](README.ru.md) · [中文](README.zh.md) · [Deutsch](README.de.md) -->
+
 # pi-fleet
 
-A [Pi coding agent](https://github.com/earendil-works/pi) extension that adds a **resilient dynamic model fleet**, **Mixture of Agents (MoA)**, and **local-first self-improving memory** — for local and external OpenAI-compatible / Ollama models alike.
+A [Pi coding agent](https://github.com/earendil-works/pi) extension that gives Pi a **self-healing fleet of models**: it discovers OpenAI-compatible and Ollama endpoints, tracks their health, and routes each request to the best one with transparent failover. It also adds an optional **Mixture of Agents** and a **learning memory**.
 
-- **Dynamic fleet** — continuously discovers, health-checks, and ranks endpoints; routes by capability + latency + throughput + health + reliability with circuit-breaking and transparent failover.
-- **MoA** — optional parallel workers synthesized by an aggregator, across local *and* external providers.
-- **Memory** — self-improvement (learns pitfalls/workarounds from tool outcomes) and bounded, reversible self-evolution.
+Everything runs alongside Pi's own providers — they keep working unchanged. pi-fleet is a package, not a fork.
 
-It ships as a Pi package (not a fork): Pi keeps working normally, and its own providers are untouched.
+## What you get
+
+- **Dynamic fleet** — background discovery (local seeds, keyless Censys scrape, or the Censys API), liveness + latency/throughput probes, per-endpoint circuit breakers, and routing weighted by model capability, latency, throughput, health, reliability, and context window.
+- **Transparent failover** — a request that hits a slow or broken endpoint is retried on the next-best one; the breaker opens after repeated failures and recovers on its own.
+- **Mixture of Agents (MoA)** — optional. Runs several models in parallel and has an aggregator synthesize one answer. Works across local and external providers, and degrades gracefully when workers fail.
+- **Memory** — learns pitfalls and workarounds from tool outcomes and injects the relevant ones before a turn. Bounded, reversible **self-evolution** tunes fleet configuration against a measured metric. Backed by [Hindsight](https://github.com/vectorize-io/hindsight) when available, and a zero-dependency local SQLite store otherwise.
 
 ## Install
 
 ```bash
-# From this repo (project-local or global)
-pi install git:github.com/<you>/pi-fleet        # or: pi install npm:pi-fleet
-# Or load the extension file directly:
+pi install git:github.com/<you>/pi-fleet      # or: pi install npm:pi-fleet
+# or load the extension directly:
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```
 
-Requires Node ≥ 22 (uses built-in `node:sqlite`). Pi picks the extension up via the `pi` key in `package.json`.
+Requires Node ≥ 22 (it uses the built-in `node:sqlite`). Pi discovers the extension through the `pi` key in `package.json`.
 
 ## Configure
 
-Drop a `fleet.config.json` in the working directory, at `~/.pi/agent/fleet.config.json`, or point `PI_FLEET_CONFIG` at one. All keys are optional; sensible defaults apply. See [`examples/fleet.config.json`](examples/fleet.config.json).
+Put a `fleet.config.json` in the working directory, in `~/.pi/agent/`, or point `PI_FLEET_CONFIG` at one. Every field is optional; defaults are in [`examples/fleet.config.json`](examples/fleet.config.json). The parts you are most likely to touch:
 
 ```jsonc
 {
-  "gatewayPort": 47600,           // local OpenAI-compatible gateway pi talks to
+  "gatewayPort": 47600,             // local port Pi talks to (see "How it works")
   "discovery": {
-    "enabled": true,
-    "seeds": ["127.0.0.1:11434"], // local Ollama, or any host:port
-    "refreshIntervalMs": 900000,
-    "healthProbeIntervalMs": 60000,
+    "seeds": ["127.0.0.1:11434"],   // local Ollama and any host:port you own
     "censys": {
-      "enabled": false,
+      "enabled": true,
       "query": "host.services.software.product = \"ollama\" or web.software.product = \"ollama\"",
-      "htmlImports": ["/path/to/saved-censys.html"], // credential-free fallback
-      "apiIdEnv": "CENSYS_API_ID", "apiSecretEnv": "CENSYS_API_SECRET"
+      "browser": { "enabled": true } // keyless live scrape (default) — see below
     }
   },
   "routing": { "capability": 1.0, "latency": 0.8, "throughput": 0.5, "health": 1.2, "reliability": 1.0, "context": 0.3 },
-  "moa": { "enabled": false, "workers": 3, "policy": "diverse", "aggregatorModel": "", "timeoutMs": 45000, "minWorkers": 1 },
-  "memory": { "enabled": true, "topK": 5, "minScore": 0.15 },
-  "evolution": { "enabled": false, "intervalMs": 3600000, "minObservations": 5, "autoApply": false },
-  "providers": [                  // external/local OpenAI-compatible providers joined into the pool
+  "moa": { "enabled": false, "workers": 3, "policy": "diverse", "aggregatorModel": "", "minWorkers": 1 },
+  "memory": { "enabled": true, "backend": "hindsight", "fallbackToNative": true },
+  "evolution": { "enabled": false, "autoApply": false },
+  "providers": [                    // external / local OpenAI-compatible endpoints in the pool
     { "id": "openrouter", "baseUrl": "https://openrouter.ai/api/v1", "apiKey": "$OPENROUTER_API_KEY",
       "models": [{ "id": "meta-llama/llama-3.1-70b-instruct", "sizeB": 70, "contextWindow": 131072 }] }
   ]
 }
 ```
 
-### Censys discovery
+### Discovery (keyless by default)
 
-Set `discovery.censys.enabled: true`. If `CENSYS_API_ID` / `CENSYS_API_SECRET` are present the Platform API is used; otherwise (or additionally) list saved Censys results pages under `htmlImports` for a credential-free import path. Discovered hosts are probed (`/api/tags` → real chat completion) and only verified endpoints join the fleet.
+The Censys web UI sits behind Cloudflare and a login wall, so a plain HTTP request only returns a challenge page. pi-fleet therefore renders the results through the [browser-search](https://github.com/Johell1NS/browser-search) stack (Camofox / camoufox stealth browser) and parses host:port out of the rendered HTML — **no Censys API key**.
+
+**Setup** — install the browser-search stack and start its Camofox container:
+
+```bash
+npm run setup:browser-search   # clone + install browser-search, start Camofox on 127.0.0.1:9377
+```
+
+This also runs automatically on `npm install` (code only — it clones and installs browser-search but does not start the container; skipped in CI or with `PI_FLEET_SKIP_SETUP=1`). It needs `git`, and `podman` or `docker` for the container. When it finishes it prints the credential to export:
+
+```bash
+export CAMOFOX_API_KEY=<generated key>   # must match the running Camofox container
+```
+
+That is the only credential the keyless path needs. `BROWSER_SEARCH_DIR` is written for you and `PI_FLEET_DIR` (used to locate the default scrape command) is set by the extension and CLI automatically.
+
+Any fetcher that prints rendered HTML also works — point `discovery.censys.browser.command` at it. For example, Firecrawl:
+
+```jsonc
+"command": ["firecrawl", "scrape", "{url}", "--format", "html", "--wait-for", "9000"],
+"resultPath": ""
+```
+
+The sources compose: `discovery.seeds`, saved Censys pages via `discovery.censys.htmlImports`, and the Censys API when `CENSYS_API_ID` / `CENSYS_API_SECRET` are set. Discovered hosts are probed (`/api/tags` → a real chat completion) and only verified endpoints join the fleet. A live keyless run through this path discovered 70+ reachable endpoints.
 
 > Only point discovery at endpoints you are authorized to use.
+
+### Memory backend
+
+`memory.backend` defaults to `"hindsight"`. At startup pi-fleet probes the Hindsight service (`memory.hindsight.baseUrl`); if it answers, lessons are retained and recalled there. If it does not, and `fallbackToNative` is true (the default), the local SQLite store takes over — so memory works with no external service. The native store always runs regardless, because it drives self-evolution.
+
+Run Hindsight yourself (Docker/Postgres) per its docs, then set `memory.hindsight.baseUrl` and, if needed, `HINDSIGHT_API_KEY`.
 
 ## Use in Pi
 
 Select the fleet as your model:
 
 ```bash
-pi --provider fleet --model auto      # capability/health-weighted routing + failover
-pi --provider fleet --model moa       # Mixture of Agents (when moa.enabled)
-pi --provider fleet --model "127.0.0.1:11434/llama3.1:70b"   # pin a discovered model
+pi --provider fleet --model auto                          # capability/health-weighted routing + failover
+pi --provider fleet --model moa                           # Mixture of Agents (when moa.enabled)
+pi --provider fleet --model "127.0.0.1:11434/llama3.1:70b" # pin a specific discovered model
 ```
 
 Commands:
 
-| Command | What it does |
+| Command | Effect |
 |---|---|
-| `/fleet` | Show endpoints, health, breaker state, models, memory |
+| `/fleet` | Endpoints, health, breaker state, models, memory backend |
 | `/fleet-refresh` | Force an immediate discovery + health refresh |
 | `/fleet-moa on\|off` | Toggle Mixture of Agents |
 | `/fleet-evolve` | Run one bounded self-evolution cycle now |
@@ -80,39 +109,39 @@ Commands:
 Operate the fleet without launching Pi:
 
 ```bash
-npm run fleetctl -- discover        # one discovery+health pass, print status
+npm run fleetctl -- discover        # one discovery + health pass, print status
 npm run fleetctl -- status
-npm run fleetctl -- import saved-censys.html   # extract host:port from saved HTML
+npm run fleetctl -- import page.html   # extract host:port from a saved Censys page
 npm run fleetctl -- chat "hello"    # route one prompt through the fleet
 npm run fleetctl -- memory          # list stored lessons
 ```
 
 ## How it works
 
-Pi talks to a small local **FleetGateway** (`gatewayPort`) as an ordinary OpenAI-compatible provider. The gateway routes each request through the engine:
+Pi talks to a small local **gateway** (`gatewayPort`) as an ordinary OpenAI-compatible provider. The gateway routes each request through the engine, so all of Pi's model handling stays on its supported path:
 
 ```
-discovery (seeds / Censys) → probe → registry (EWMA stats + circuit breaker)
-                                        │
+discovery (seeds / browser-scrape / Censys API) → probe → registry (EWMA stats + circuit breaker)
+                                                            │
         request ──► router (weighted score) ──► failover executor ──► endpoint
-                                        └► MoA: parallel workers → aggregator
-observations ──► memory (sqlite lessons) ──► self-improvement / self-evolution
+                                                    └► MoA: parallel workers → aggregator
+observations ──► memory (Hindsight or native SQLite) ──► self-improvement / self-evolution
 ```
 
-- **Circuit breaker**: `failureThreshold` consecutive failures open an endpoint; after `cooldownMs` it half-opens for a trial; `recoveryThreshold` successes close it.
-- **Self-evolution** is bounded and reversible: it only auto-applies *configuration* changes (endpoint quarantine, routing-weight tweaks) that measurably improve a metric, rolling back otherwise; code/skill changes are emitted as git-tracked review-only proposals under `.pi/fleet-evolution/`.
+- **Circuit breaker** — `failureThreshold` consecutive failures open an endpoint; after `cooldownMs` it half-opens for a trial; `recoveryThreshold` successes close it.
+- **Self-evolution** — bounded and reversible. It auto-applies only *configuration* changes (quarantining a flaky endpoint, nudging routing weights) that measurably improve a metric, and rolls back otherwise. Anything touching code or skills is written as a git-tracked, review-only proposal under `.pi/fleet-evolution/`.
 
-State lives under `~/.pi/agent/fleet/` (memory sqlite, evolution artifacts); nothing sensitive is committed.
+Transient state lives under `~/.pi/agent/fleet/` (native memory database, evolution artifacts). Nothing sensitive is committed.
 
 ## Test
 
 ```bash
-npm test          # unit + integration + E2E (in-process mock endpoints; no external hosts)
+npm test          # unit + integration + end-to-end (in-process mock endpoints; no external hosts)
 npm run typecheck
 ```
 
-The E2E suite (`test/e2e.test.ts`) validates discovery/refresh, health transitions, routing, transparent failover, recovery, local+external interop, MoA (success + partial-failure), pitfall persistence/retrieval, scheduled loops, evolution accept/rollback, and clean restart with persisted state.
+The end-to-end suite (`test/e2e.test.ts`) covers discovery and refresh, health transitions, routing, transparent failover, endpoint recovery, local + external interoperability, MoA success and partial-worker failure, pitfall persistence and retrieval, the scheduled loops, self-evolution accept and rollback, and a clean restart with persisted state.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
