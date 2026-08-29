@@ -1,0 +1,37 @@
+{
+  "name": "pi-fleet",
+  "version": "0.1.0",
+  "description": "Resilient dynamic model fleet, MoA, and self-improving memory for the Pi coding agent",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "pi-fleet": "./src/cli/fleetctl.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-sqlite --test --import tsx test/*.test.ts",
+    "test:e2e": "node --experimental-sqlite --test --import tsx test/e2e.test.ts",
+    "typecheck": "tsc --noEmit",
+    "fleetctl": "tsx src/cli/fleetctl.ts"
+  },
+  "pi": {
+    "extensions": [
+      "./src/ext/fleet-extension.ts"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.80.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  }
+}

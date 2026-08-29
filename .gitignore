@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+# transient discovery / runtime state
+.fleet/
+*.sqlite
+*.sqlite-*
+data/*.json
+!data/.gitkeep
+# credentials / caches
+auth.json
+.pi/agent/auth.json
+coverage/
+.DS_Store
+# large saved-HTML imports (keep out of git)
+*.censys.html
