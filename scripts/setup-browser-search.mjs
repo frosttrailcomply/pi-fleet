@@ -37,10 +37,28 @@ if (isPostinstall && (process.env.CI || process.env.PI_FLEET_SKIP_SETUP)) {
   process.exit(0);
 }
 
+const IS_WIN = process.platform === "win32";
+// On Windows, npm is a shim (npm.cmd); execFile won't find bare "npm", and .cmd
+// needs a shell. Run npm through the shell there.
+const NPM = IS_WIN ? "npm.cmd" : "npm";
+
 function run(cmd, cmdArgs, opts = {}) { return execFileSync(cmd, cmdArgs, { stdio: "inherit", ...opts }); }
+function runShell(line, opts = {}) { return execFileSync(line, { stdio: "inherit", shell: true, ...opts }); }
 function out(cmd, cmdArgs) { return execFileSync(cmd, cmdArgs, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
-function has(cmd) { try { execFileSync(cmd, ["--version"], { stdio: "ignore" }); return true; } catch { return false; } }
+function has(cmd) {
+  try {
+    if (IS_WIN) execFileSync(`${cmd} --version`, { stdio: "ignore", shell: true });
+    else execFileSync(cmd, ["--version"], { stdio: "ignore" });
+    return true;
+  } catch { return false; }
+}
 function engine() { return has("podman") ? "podman" : has("docker") ? "docker" : null; }
+
+function npmInstall(cwd) {
+  console.log("[setup] npm install (browser-search)");
+  if (IS_WIN) runShell(`${NPM} install`, { cwd });
+  else run(NPM, ["install"], { cwd });
+}
 
 function cloneAndInstall() {
   if (existsSync(join(CLONE_DIR, "package.json"))) {
@@ -51,8 +69,13 @@ function cloneAndInstall() {
     console.log(`[setup] cloning browser-search -> ${CLONE_DIR}`);
     run("git", ["clone", "--depth", "1", REPO, CLONE_DIR]);
   }
-  console.log("[setup] npm install (browser-search)");
-  run("npm", ["install"], { cwd: CLONE_DIR });
+  // The container + key are what discovery needs at runtime (our scraper talks
+  // to Camofox over HTTP), so a failed clone-install must not abort setup.
+  try {
+    npmInstall(CLONE_DIR);
+  } catch (e) {
+    console.error(`[setup] browser-search 'npm install' skipped: ${e.message}`);
+  }
 }
 
 function ensureKey() {
