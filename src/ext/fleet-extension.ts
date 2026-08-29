@@ -3,10 +3,12 @@
 // lifecycle hooks. All substantive logic lives in the (pi-independent, tested)
 // engine; this file only translates between pi's API and the orchestrator.
 
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PiExtensionAPI, PiEventCtx, PiCommandCtx } from "./pi-types.ts";
 import { loadConfig } from "../engine/config.ts";
+import { loadFleetEnv } from "../engine/env.ts";
 import { FleetOrchestrator } from "../engine/orchestrator.ts";
 import { FleetGateway } from "./gateway.ts";
 
@@ -15,8 +17,19 @@ const PROVIDER = "fleet";
 // ${PI_FLEET_DIR}/scripts/censys-camofox.mjs.
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+/** Best-effort: ensure the Camofox container is up (fast start; no blocking). */
+function ensureCamofox(): void {
+  const child = spawn(process.execPath, [join(PKG_ROOT, "scripts", "setup-browser-search.mjs"), "--start-only"], {
+    stdio: "ignore",
+    detached: true,
+  });
+  child.on("error", () => {});
+  child.unref();
+}
+
 export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> {
   if (!process.env.PI_FLEET_DIR) process.env.PI_FLEET_DIR = PKG_ROOT;
+  loadFleetEnv(); // pull CAMOFOX_API_KEY / BROWSER_SEARCH_DIR from ~/.pi/agent/fleet
   const configPath = process.env.PI_FLEET_CONFIG;
   const cfg = loadConfig(configPath);
   // pi surfaces a provider's models only when its apiKey resolves via an env var
@@ -114,6 +127,8 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
 
   // --- Lifecycle hooks -------------------------------------------------------
   pi.on("session_start", async (_e: unknown, _ctx: PiEventCtx) => {
+    // Make sure the Camofox stealth browser is running for keyless discovery.
+    if (cfg.discovery.censys.enabled && cfg.discovery.censys.browser.enabled) ensureCamofox();
     await orch.start().catch(() => {});
   });
 

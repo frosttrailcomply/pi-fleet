@@ -1,95 +1,108 @@
 #!/usr/bin/env node
-// Install the browser-search stack (github.com/Johell1NS/browser-search) that
-// powers pi-fleet's keyless Censys discovery, and optionally bring up its
-// Camofox (camoufox) stealth-browser container.
+// One-shot installer for the browser-search stack that powers pi-fleet's
+// keyless Censys discovery. Runs automatically from `postinstall`, so installing
+// the extension installs the whole stack — no separate manual step.
 //
-// Modes:
-//   node scripts/setup-browser-search.mjs               # clone + npm install + start Camofox
-//   node scripts/setup-browser-search.mjs --code-only   # clone + npm install only (no container)
+// Full run (default): clone browser-search, npm install it, generate/reuse a
+// CAMOFOX_API_KEY, and pull + start the Camofox (camoufox) container. All state
+// lives under ~/.pi/agent/fleet/ so the extension and CLI can find it at runtime
+// regardless of the shell environment.
 //
-// Credentials: a CAMOFOX_API_KEY is generated (or reused from the env) and
-// written to <clone>/.env; the container is started with it. Export the same
-// key in the shell/session where pi/pi-fleet runs so the scraper can talk to it.
+//   node scripts/setup-browser-search.mjs               # full (default)
+//   node scripts/setup-browser-search.mjs --code-only   # clone + npm install only
+//   node scripts/setup-browser-search.mjs --start-only   # just (re)start the container
 //
-// Safe to re-run: skips work that is already done, and never hard-fails a parent
-// `npm install` (postinstall calls it with --code-only and swallows errors).
+// Never hard-fails a parent `npm install`: missing git/docker/network degrade to
+// a warning and a printed next step.
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const FLEET_DIR = process.env.PI_FLEET_STATE_DIR || join(homedir(), ".pi", "agent", "fleet");
+const CLONE_DIR = process.env.BROWSER_SEARCH_DIR || join(FLEET_DIR, "browser-search");
+const ENV_FILE = join(FLEET_DIR, "camofox.env");           // stable, machine-readable (KEY=VALUE)
 const REPO = "https://github.com/Johell1NS/browser-search";
-const CLONE_DIR = process.env.BROWSER_SEARCH_DIR || join(PKG_ROOT, ".browser-search");
-const codeOnly = process.argv.includes("--code-only");
+const IMAGE = "ghcr.io/jo-inc/camofox-browser:latest";
+
+const args = new Set(process.argv.slice(2));
+const codeOnly = args.has("--code-only");
+const startOnly = args.has("--start-only");
 const isPostinstall = process.env.npm_lifecycle_event === "postinstall";
 
-// During automated installs, stay out of the way: skip in CI or when opted out,
-// and skip if the stack is already present. Never block the install.
 if (isPostinstall && (process.env.CI || process.env.PI_FLEET_SKIP_SETUP)) {
   console.log("[setup] postinstall skipped (CI or PI_FLEET_SKIP_SETUP)");
   process.exit(0);
 }
 
-function run(cmd, args, opts = {}) {
-  return execFileSync(cmd, args, { stdio: "inherit", ...opts });
-}
-function has(cmd) {
-  try { execFileSync(cmd, ["--version"], { stdio: "ignore" }); return true; } catch { return false; }
-}
+function run(cmd, cmdArgs, opts = {}) { return execFileSync(cmd, cmdArgs, { stdio: "inherit", ...opts }); }
+function out(cmd, cmdArgs) { return execFileSync(cmd, cmdArgs, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); }
+function has(cmd) { try { execFileSync(cmd, ["--version"], { stdio: "ignore" }); return true; } catch { return false; } }
+function engine() { return has("podman") ? "podman" : has("docker") ? "docker" : null; }
 
 function cloneAndInstall() {
   if (existsSync(join(CLONE_DIR, "package.json"))) {
     console.log(`[setup] browser-search present at ${CLONE_DIR}`);
   } else {
-    if (!has("git")) throw new Error("git not found");
-    mkdirSync(dirname(CLONE_DIR), { recursive: true });
+    if (!has("git")) throw new Error("git not found — cannot install browser-search");
+    mkdirSync(CLONE_DIR, { recursive: true });
     console.log(`[setup] cloning browser-search -> ${CLONE_DIR}`);
     run("git", ["clone", "--depth", "1", REPO, CLONE_DIR]);
   }
   console.log("[setup] npm install (browser-search)");
   run("npm", ["install"], { cwd: CLONE_DIR });
-  return CLONE_DIR;
 }
 
 function ensureKey() {
-  const envFile = join(CLONE_DIR, ".env");
+  mkdirSync(FLEET_DIR, { recursive: true });
   let key = process.env.CAMOFOX_API_KEY;
-  if (!key && existsSync(envFile)) {
-    const m = readFileSync(envFile, "utf8").match(/CAMOFOX_API_KEY=(.+)/);
-    if (m) key = m[1].trim();
-  }
+  const readKV = (file, re) => { try { const m = readFileSync(file, "utf8").match(re); return m ? m[1].trim() : null; } catch { return null; } };
+  if (!key) key = readKV(ENV_FILE, /CAMOFOX_API_KEY=(.+)/);
+  if (!key) key = readKV(join(CLONE_DIR, ".env"), /CAMOFOX_API_KEY=(.+)/);
   if (!key) key = randomBytes(16).toString("hex");
-  writeFileSync(envFile, `CAMOFOX_API_KEY=${key}\n`);
+  // Persist to both the stable env file (read by the extension) and the clone's .env (used by --env-file).
+  writeFileSync(ENV_FILE, `CAMOFOX_API_KEY=${key}\nBROWSER_SEARCH_DIR=${CLONE_DIR}\n`);
+  try { mkdirSync(CLONE_DIR, { recursive: true }); writeFileSync(join(CLONE_DIR, ".env"), `CAMOFOX_API_KEY=${key}\n`); } catch { /* clone may not exist in start-only */ }
   return key;
 }
 
-function startCamofox(key) {
-  const engine = has("podman") ? "podman" : has("docker") ? "docker" : null;
-  if (!engine) { console.log("[setup] no podman/docker found; start Camofox manually (see README)"); return; }
-  const envFile = join(CLONE_DIR, ".env");
-  try { run(engine, ["rm", "-f", "camofox-browser"], { stdio: "ignore" }); } catch { /* not running */ }
-  console.log(`[setup] starting Camofox via ${engine} on 127.0.0.1:9377`);
-  run(engine, [
+function containerExists(eng) { try { return out(eng, ["ps", "-a", "--format", "{{.Names}}"]).split(/\r?\n/).includes("camofox-browser"); } catch { return false; } }
+function containerRunning(eng) { try { return out(eng, ["ps", "--format", "{{.Names}}"]).split(/\r?\n/).includes("camofox-browser"); } catch { return false; } }
+
+function startCamofox() {
+  const eng = engine();
+  if (!eng) { console.log("[setup] no podman/docker found — start Camofox manually (see README)"); return false; }
+  if (containerRunning(eng)) { console.log("[setup] Camofox already running"); return true; }
+  const envFile = existsSync(join(CLONE_DIR, ".env")) ? join(CLONE_DIR, ".env") : ENV_FILE;
+  if (containerExists(eng)) {
+    console.log(`[setup] starting existing Camofox container via ${eng}`);
+    run(eng, ["start", "camofox-browser"]);
+    return true;
+  }
+  console.log(`[setup] pulling + starting Camofox via ${eng} on 127.0.0.1:9377 (first run downloads the image)`);
+  run(eng, [
     "run", "-d", "--name", "camofox-browser", "--restart", "unless-stopped",
-    "--memory", "2g", "-p", "127.0.0.1:9377:9377", "--env-file", envFile,
-    "ghcr.io/jo-inc/camofox-browser:latest",
+    "--memory", "2g", "-p", "127.0.0.1:9377:9377", "--env-file", envFile, IMAGE,
   ]);
+  return true;
 }
 
 try {
-  cloneAndInstall();
-  const key = ensureKey();
-  if (!codeOnly) startCamofox(key);
-  console.log("\n[setup] done. Export these where pi-fleet runs:\n");
-  console.log(`  export BROWSER_SEARCH_DIR=${CLONE_DIR}`);
-  console.log(`  export CAMOFOX_API_KEY=${key}`);
-  if (codeOnly) console.log("\n  Then start Camofox: node scripts/setup-browser-search.mjs   (or see README)");
+  if (startOnly) {
+    ensureKey();
+    startCamofox();
+  } else {
+    cloneAndInstall();
+    ensureKey();
+    if (!codeOnly) startCamofox();
+  }
+  console.log(`\n[setup] done. State in ${FLEET_DIR} (auto-loaded by the extension).`);
+  if (codeOnly) console.log("[setup] container not started (code-only). Start it: npm run setup:browser-search");
 } catch (e) {
   console.error(`[setup] ${e.message}`);
+  console.error("[setup] keyless Censys discovery will be unavailable until the browser-search stack is installed.");
   // Never fail a parent npm install.
-  if (process.env.npm_lifecycle_event === "postinstall") process.exit(0);
-  process.exit(1);
+  process.exit(isPostinstall ? 0 : 1);
 }

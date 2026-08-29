@@ -21,7 +21,9 @@ pi install git:github.com/frosttrailcomply/pi-fleet      # 或: pi install npm:p
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```
 
-需要 Node ≥ 22（使用内置的 `node:sqlite`）。Pi 通过 `package.json` 中的 `pi` 键发现该扩展。
+这一条命令会配置好一切，包括无密钥发现所需的技术栈：安装时会自动克隆并安装 [browser-search](https://github.com/Johell1NS/browser-search) 技术栈，拉取并启动其 Camofox（camoufox）容器（`npm` 的 `postinstall` 步骤），并生成所需凭据。无需再运行任何东西。
+
+**前置条件：** Node ≥ 22（内置 `node:sqlite`）、`git`，以及用于 Camofox 容器的 `podman` 或 `docker`。首次安装会下载一个浏览器镜像。要跳过技术栈的自动安装，设置 `PI_FLEET_SKIP_SETUP=1`。Pi 通过 `package.json` 中的 `pi` 键发现该扩展。
 
 ## 配置
 
@@ -53,19 +55,14 @@ pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 
 Censys 的网页界面位于 Cloudflare 与登录墙之后，普通 HTTP 请求只会返回一个验证页。因此 pi-fleet 通过 [browser-search](https://github.com/Johell1NS/browser-search) 技术栈（Camofox / camoufox 隐身浏览器）渲染结果，并从渲染后的 HTML 中解析 host:port —— **无需 Censys API 密钥**。
 
-**安装** —— 安装 browser-search 技术栈并启动其 Camofox 容器：
+这开箱即用：技术栈会在[安装](#安装)时为你装好并启动其 Camofox 容器，扩展还会在每次会话开始时确认容器正在运行。`CAMOFOX_API_KEY` 只生成一次并保存在 `~/.pi/agent/fleet/`，扩展与 CLI 会自动加载它 —— 你无需导出任何东西。
+
+如果需要手动（重新）安装或重启：
 
 ```bash
-npm run setup:browser-search   # 克隆并安装 browser-search，在 127.0.0.1:9377 启动 Camofox
+npm run setup:browser-search   # 重新安装技术栈并在 127.0.0.1:9377 启动 Camofox
+npm run setup:camofox          # 仅重启容器
 ```
-
-它也会在 `npm install` 时自动运行（仅代码 —— 克隆并安装 browser-search，但不启动容器；在 CI 中或设置 `PI_FLEET_SKIP_SETUP=1` 时跳过）。需要 `git`，以及用于容器的 `podman` 或 `docker`。完成后会打印需要导出的凭据：
-
-```bash
-export CAMOFOX_API_KEY=<生成的密钥>   # 必须与运行中的 Camofox 容器一致
-```
-
-这是无密钥路径唯一需要的凭据。`BROWSER_SEARCH_DIR` 会自动写好，而 `PI_FLEET_DIR`（用于定位默认抓取命令）由扩展与 CLI 自动设置。
 
 任何能打印渲染后 HTML 的抓取器都可用 —— 在 `discovery.censys.browser.command` 中指定即可。例如 Firecrawl：
 
@@ -141,6 +138,15 @@ npm run typecheck
 ```
 
 端到端套件（`test/e2e.test.ts`）覆盖发现与刷新、健康状态转换、路由、透明故障转移、端点恢复、本地与外部互通、MoA 成功与部分 worker 失败、经验的持久化与召回、定时循环、自我演化的接受与回滚，以及带持久化状态的干净重启。
+
+## 卸载
+
+```bash
+pi remove git:github.com/frosttrailcomply/pi-fleet   # 从 Pi 移除扩展
+npm run uninstall:stack                              # 在包目录中：移除 Camofox 容器、browser-search 克隆以及保存的凭据
+```
+
+加上 `--purge` 可一并删除本地记忆数据库：`node scripts/uninstall.mjs --purge`。
 
 ## 致谢
 

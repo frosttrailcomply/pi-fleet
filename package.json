@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit",
     "fleetctl": "tsx src/cli/fleetctl.ts",
     "setup:browser-search": "node scripts/setup-browser-search.mjs",
-    "postinstall": "node scripts/setup-browser-search.mjs --code-only"
+    "setup:camofox": "node scripts/setup-browser-search.mjs --start-only",
+    "uninstall:stack": "node scripts/uninstall.mjs",
+    "postinstall": "node scripts/setup-browser-search.mjs"
   },
   "pi": {
     "extensions": [

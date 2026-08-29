@@ -21,7 +21,9 @@ pi install git:github.com/frosttrailcomply/pi-fleet      # oder: pi install npm:
 pi -e /path/to/pi-fleet/src/ext/fleet-extension.ts
 ```
 
-Benötigt Node ≥ 22 (nutzt das eingebaute `node:sqlite`). Pi findet die Erweiterung über den `pi`-Schlüssel in `package.json`.
+Dieser eine Befehl richtet alles ein, auch den Stack für die schlüssellose Erkennung: Bei der Installation werden der [browser-search](https://github.com/Johell1NS/browser-search)-Stack automatisch geklont und installiert und dessen Camofox- (camoufox) Container heruntergeladen und gestartet (ein `npm`-`postinstall`-Schritt); die nötige Zugangsangabe wird erzeugt. Sonst ist nichts auszuführen.
+
+**Voraussetzungen:** Node ≥ 22 (eingebautes `node:sqlite`), `git` sowie `podman` oder `docker` (für den Camofox-Container). Die erste Installation lädt ein Browser-Image herunter. Um die automatische Stack-Einrichtung zu überspringen, setzen Sie `PI_FLEET_SKIP_SETUP=1`. Pi findet die Erweiterung über den `pi`-Schlüssel in `package.json`.
 
 ## Konfiguration
 
@@ -53,19 +55,14 @@ Legen Sie eine `fleet.config.json` ins Arbeitsverzeichnis, nach `~/.pi/agent/`, 
 
 Die Censys-Weboberfläche liegt hinter Cloudflare und einer Anmeldeschranke, daher liefert eine einfache HTTP-Anfrage nur eine Challenge-Seite. pi-fleet rendert die Ergebnisse deshalb über den [browser-search](https://github.com/Johell1NS/browser-search)-Stack (Camofox / camoufox, ein Stealth-Browser) und liest host:port aus dem gerenderten HTML – **ohne Censys-API-Schlüssel**.
 
-**Einrichtung** – den browser-search-Stack installieren und dessen Camofox-Container starten:
+Das funktioniert sofort: Der Stack wird bei der [Installation](#installation) für Sie eingerichtet und sein Camofox-Container gestartet, und die Erweiterung prüft zu Beginn jeder Sitzung erneut, dass der Container läuft. Der `CAMOFOX_API_KEY` wird einmalig erzeugt und unter `~/.pi/agent/fleet/` gespeichert; Erweiterung und CLI laden ihn automatisch – Sie exportieren nichts.
+
+Falls Sie es doch einmal von Hand (neu) installieren oder neu starten müssen:
 
 ```bash
-npm run setup:browser-search   # browser-search klonen + installieren, Camofox auf 127.0.0.1:9377 starten
+npm run setup:browser-search   # Stack neu installieren und Camofox auf 127.0.0.1:9377 starten
+npm run setup:camofox          # nur den Container neu starten
 ```
-
-Das läuft auch automatisch bei `npm install` (nur Code – klont und installiert browser-search, startet aber nicht den Container; übersprungen in CI oder mit `PI_FLEET_SKIP_SETUP=1`). Benötigt `git` sowie `podman` oder `docker` für den Container. Am Ende wird die zu exportierende Zugangsangabe ausgegeben:
-
-```bash
-export CAMOFOX_API_KEY=<generierter Schlüssel>   # muss mit dem laufenden Camofox-Container übereinstimmen
-```
-
-Das ist die einzige Zugangsangabe, die der schlüssellose Weg braucht. `BROWSER_SEARCH_DIR` wird für Sie geschrieben, und `PI_FLEET_DIR` (zum Auffinden des Standard-Scrape-Befehls) setzen die Erweiterung und das CLI selbst.
 
 Jeder Fetcher, der das gerenderte HTML ausgibt, funktioniert – verweisen Sie `discovery.censys.browser.command` darauf. Zum Beispiel Firecrawl:
 
@@ -141,6 +138,15 @@ npm run typecheck
 ```
 
 Die End-to-End-Suite (`test/e2e.test.ts`) deckt ab: Erkennung und Refresh, Gesundheitsübergänge, Routing, transparentes Failover, Endpunkt-Erholung, Zusammenspiel lokaler und externer Provider, MoA-Erfolg und teilweisen Worker-Ausfall, Persistenz und Abruf von Lektionen, die geplanten Schleifen, Annahme und Rollback der Self-Evolution sowie einen sauberen Neustart mit persistiertem Zustand.
+
+## Deinstallation
+
+```bash
+pi remove git:github.com/frosttrailcomply/pi-fleet   # die Erweiterung aus Pi entfernen
+npm run uninstall:stack                              # im Paketverzeichnis: Camofox-Container, browser-search-Klon und gespeicherte Zugangsangabe entfernen
+```
+
+Mit `--purge` wird auch die native Gedächtnisdatenbank gelöscht: `node scripts/uninstall.mjs --purge`.
 
 ## Danksagung
 
