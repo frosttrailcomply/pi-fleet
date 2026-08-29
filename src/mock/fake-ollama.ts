@@ -14,6 +14,8 @@ export interface FakeOllamaOptions {
   reply?: string;
   /** Fixed number of completion tokens to report (for throughput tests). */
   completionTokens?: number;
+  /** Simulate a honeypot/fake: ignore the discovery canary and always return `reply`. */
+  ignoreCanary?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export class FakeOllama {
       tagsFail: opts.tagsFail ?? false,
       reply: opts.reply ?? "ok",
       completionTokens: opts.completionTokens ?? 5,
+      ignoreCanary: opts.ignoreCanary ?? false,
     };
     this.server = createServer((req, res) => this.handle(req, res));
   }
@@ -42,6 +45,17 @@ export class FakeOllama {
   /** Mutate behavior at runtime (drives health-transition tests). */
   set(opts: Partial<FakeOllamaOptions>): void {
     Object.assign(this.opts, opts);
+  }
+
+  private async readBody(req: import("node:http").IncomingMessage): Promise<{ messages?: Array<{ content?: string }> }> {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      if (chunks.length === 0) return {};
+      return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      return {}; // aborted request or malformed body
+    }
   }
 
   private async handle(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): Promise<void> {
@@ -69,10 +83,15 @@ export class FakeOllama {
         res.writeHead(this.opts.chatStatus).end(JSON.stringify({ error: "forced" }));
         return;
       }
+      // Simulate a real model: answer the discovery canary ("Compute a + b").
+      const body = await this.readBody(req);
+      const last = (body.messages ?? []).map((m) => m.content).join(" ");
+      const m = this.opts.ignoreCanary ? null : last.match(/Compute\s+(\d+)\s*\+\s*(\d+)/i);
+      const content = m ? String(Number(m[1]) + Number(m[2])) : this.opts.reply;
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          choices: [{ message: { role: "assistant", content: this.opts.reply } }],
+          choices: [{ message: { role: "assistant", content } }],
           usage: { prompt_tokens: 3, completion_tokens: this.opts.completionTokens, total_tokens: 3 + this.opts.completionTokens },
         }),
       );

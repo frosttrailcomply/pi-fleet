@@ -76,6 +76,17 @@ describe("probe against fake ollama", () => {
     assert.match(bad.detail, /chat_http_500/);
   });
 
+  test("canary rejects honeypot/fake endpoints (live but wrong answer)", async () => {
+    const fake = new FakeOllama({ models: ["Qwen/Qwen3-Coder-480B"], reply: "I'd be happy to help with that.", ignoreCanary: true });
+    await fake.start();
+    const r = await verifyModel(fake.baseUrl, "Qwen/Qwen3-Coder-480B");
+    assert.equal(r.ok, false);
+    assert.equal(r.detail, "canary_failed");
+    // A real model that computes the sum passes.
+    assert.equal((await verifyModel(live.baseUrl, "llama3.1:8b")).ok, true);
+    await fake.stop();
+  });
+
   test("reconFleet returns only endpoints with verified models", async () => {
     const hosts = [
       { host: "127.0.0.1", port: live.port },

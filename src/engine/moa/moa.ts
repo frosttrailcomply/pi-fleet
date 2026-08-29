@@ -95,11 +95,12 @@ export class MoaOrchestrator {
       return outcome.result ? { model: `${cand.endpointId}/${cand.modelId}`, content: outcome.result.content } : null;
     });
 
-    // Drop degenerate worker outputs (mislabeled public endpoints echo the
-    // prompt or emit junk like "-232"), then require a real quorum.
+    // Drop degenerate / prompt-parroting worker outputs (mislabeled public
+    // endpoints echo the prompt or emit junk like "-232"), then require a quorum.
+    const userText = req.messages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
     const good = proposals
       .filter((p): p is { model: string; content: string } => p !== null)
-      .filter((p) => !isDegenerate(p.content));
+      .filter((p) => !isDegenerate(p.content) && !echoesPrompt(p.content, userText));
     if (good.length < Math.max(1, this.cfg.minWorkers)) {
       throw new Error(`moa: ${good.length}/${workers.length} usable worker answers (min ${this.cfg.minWorkers})`);
     }
@@ -124,7 +125,7 @@ export class MoaOrchestrator {
 
     // Accept the aggregator only if it produced a real answer — not empty, not
     // our scaffolding echoed back, not junk. Otherwise use the best worker.
-    if (aggOutcome.result && !isDegenerate(aggOutcome.result.content) && !echoesScaffolding(aggOutcome.result.content)) {
+    if (aggOutcome.result && !isDegenerate(aggOutcome.result.content) && !echoesScaffolding(aggOutcome.result.content) && !echoesPrompt(aggOutcome.result.content, userText)) {
       return {
         content: aggOutcome.result.content,
         aggregatorEndpoint: aggOutcome.result.endpointId,
@@ -162,6 +163,23 @@ export class MoaOrchestrator {
 /** True if the aggregator echoed our aggregation scaffolding instead of answering. */
 export function echoesScaffolding(text: string): boolean {
   return /###\s*Candidate\s+\d|Produce the single best final answer|Original user query:|Candidate responses:/i.test(text);
+}
+
+/**
+ * True if an answer just parrots the user's prompt back (honeypot/echo proxies
+ * repeat the prompt, often several times) rather than answering it.
+ */
+export function echoesPrompt(answer: string, userText: string): boolean {
+  const u = (userText ?? "").trim().toLowerCase();
+  const a = (answer ?? "").toLowerCase();
+  if (u.length < 20) return false;
+  const key = u.slice(0, 40);
+  // Prompt fragment repeated -> parrot.
+  let idx = a.indexOf(key), count = 0;
+  while (idx !== -1) { count++; idx = a.indexOf(key, idx + key.length); }
+  if (count >= 2) return true;
+  // Answer is largely just the prompt verbatim.
+  return a.includes(u) && u.length > a.length * 0.5;
 }
 
 /**

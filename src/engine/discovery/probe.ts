@@ -86,20 +86,33 @@ export async function verifyModel(
     return await withTimeout(opts.timeoutMs ?? 15_000, opts.signal, async (sig) => {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (opts.apiKey) headers.authorization = `Bearer ${opts.apiKey}`;
+      // Canary challenge: a random sum whose answer is NOT present in the prompt.
+      // A real model computes it; honeypots/echo-proxies that parrot the prompt
+      // or return canned filler cannot, so mislabeled fake endpoints are rejected.
+      const a = 10 + Math.floor(Math.random() * 90);
+      const b = 10 + Math.floor(Math.random() * 90);
+      const sum = a + b;
       const res = await doFetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model, messages: [{ role: "user", content: "hello" }], max_tokens: 1, stream: false }),
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: `Compute ${a} + ${b}. Reply with only the number, nothing else.` }],
+          max_tokens: 16,
+          temperature: 0,
+          stream: false,
+        }),
         signal: sig,
       });
       const latencyMs = Date.now() - started;
       if (!res.ok) return { ok: false, latencyMs, tokens: 0, detail: `chat_http_${res.status}` };
       const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }>; usage?: { completion_tokens?: number } };
       const content = data.choices?.[0]?.message?.content;
-      if (typeof content === "string" && content.trim()) {
-        return { ok: true, latencyMs, tokens: data.usage?.completion_tokens ?? 1, detail: "chat_ok" };
-      }
-      return { ok: false, latencyMs, tokens: 0, detail: "chat_empty_content" };
+      if (typeof content !== "string" || !content.trim()) return { ok: false, latencyMs, tokens: 0, detail: "chat_empty_content" };
+      const tokens = data.usage?.completion_tokens ?? 1;
+      if (new RegExp(`\\b${sum}\\b`).test(content)) return { ok: true, latencyMs, tokens, detail: "canary_ok" };
+      // Live but failed the canary — most likely a fake/echo endpoint.
+      return { ok: false, latencyMs, tokens, detail: "canary_failed" };
     });
   } catch (e) {
     return { ok: false, latencyMs: Date.now() - started, tokens: 0, detail: `chat_error:${(e as Error).name}` };

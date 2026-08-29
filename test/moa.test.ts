@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { FleetRegistry } from "../src/engine/registry.ts";
 import { Router } from "../src/engine/routing/router.ts";
 import { FailoverExecutor } from "../src/engine/routing/executor.ts";
-import { MoaOrchestrator, isDegenerate, echoesScaffolding } from "../src/engine/moa/moa.ts";
+import { MoaOrchestrator, isDegenerate, echoesScaffolding, echoesPrompt } from "../src/engine/moa/moa.ts";
 import { DEFAULT_CONFIG } from "../src/engine/config.ts";
 import type { Endpoint, MoaConfig } from "../src/engine/types.ts";
 import { FakeOllama } from "../src/mock/fake-ollama.ts";
@@ -71,6 +71,14 @@ describe("MoA orchestrator", () => {
     assert.equal(isDegenerate("Hi there! What can I help you with?"), false);
     assert.equal(echoesScaffolding("### Candidate 2 (x/y)\nHi\n\nProduce the single best final answer."), true);
     assert.equal(echoesScaffolding("Hello! How can I help?"), false);
+  });
+
+  test("echoesPrompt detects honeypot prompt-parroting", () => {
+    const prompt = "You are professional OSINTer. collect all available info about ua company firepoint and their partners";
+    const parrot = `I'd be happy to help. Regarding "${prompt}", I recommend step by step. ${prompt}`;
+    assert.equal(echoesPrompt(parrot, prompt), true);
+    assert.equal(echoesPrompt("Firepoint is a company; here is what I found: ...", prompt), false);
+    assert.equal(echoesPrompt("anything", "hi"), false); // short prompt -> not flagged
   });
 
   test("aggregator that echoes the prompt -> falls back to best worker", async () => {
