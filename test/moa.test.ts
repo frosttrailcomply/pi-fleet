@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { FleetRegistry } from "../src/engine/registry.ts";
 import { Router } from "../src/engine/routing/router.ts";
 import { FailoverExecutor } from "../src/engine/routing/executor.ts";
-import { MoaOrchestrator } from "../src/engine/moa/moa.ts";
+import { MoaOrchestrator, isDegenerate, echoesScaffolding } from "../src/engine/moa/moa.ts";
 import { DEFAULT_CONFIG } from "../src/engine/config.ts";
 import type { Endpoint, MoaConfig } from "../src/engine/types.ts";
 import { FakeOllama } from "../src/mock/fake-ollama.ts";
@@ -63,6 +63,50 @@ describe("MoA orchestrator", () => {
     assert.equal(res.aggregatorEndpoint, null);
   });
 
+  test("degeneracy guards flag junk vs real answers", () => {
+    assert.equal(isDegenerate("-232"), true);
+    assert.equal(isDegenerate("   "), true);
+    assert.equal(isDegenerate("42"), true);
+    assert.equal(isDegenerate("ok"), false);
+    assert.equal(isDegenerate("Hi there! What can I help you with?"), false);
+    assert.equal(echoesScaffolding("### Candidate 2 (x/y)\nHi\n\nProduce the single best final answer."), true);
+    assert.equal(echoesScaffolding("Hello! How can I help?"), false);
+  });
+
+  test("aggregator that echoes the prompt -> falls back to best worker", async () => {
+    // Aggregator endpoint replies with the scaffolding (mislabeled public model).
+    const echo = new FakeOllama({ models: ["e:120b"], reply: "### Candidate 1 (w/x)\nhi\n\nProduce the single best final answer." });
+    await echo.start();
+    const r = new FleetRegistry(DEFAULT_CONFIG.health);
+    const conns: Record<string, { baseUrl: string }> = {};
+    const reg = (id: string, model: string, size: number, url: string) => { r.upsert(ep(id, model, size, url)); conns[id] = { baseUrl: url }; };
+    reg("w1", "a:8b", 8, w1.baseUrl);
+    reg("w2", "b:8b", 8, w2.baseUrl);
+    reg("echo", "e:120b", 120, echo.baseUrl);
+    const router = new Router(r, DEFAULT_CONFIG.routing);
+    const exec = new FailoverExecutor(r, router, (id) => conns[id] ?? null);
+    const cfg: MoaConfig = { ...DEFAULT_CONFIG.moa, enabled: true, workers: 2, workerModels: ["w1/a:8b", "w2/b:8b"], parallelism: 2, minWorkers: 1, aggregatorModel: "echo/e:120b" };
+    const res = await new MoaOrchestrator(cfg, router, exec).run({ messages: [{ role: "user", content: "hi" }] });
+    assert.equal(res.usedFallback, true, "echoed aggregation rejected");
+    assert.match(res.content, /worker-\d-answer/, "returned a real worker answer, not the scaffolding");
+    await echo.stop();
+  });
+
+  test("all-junk workers -> throws so caller reverts to normal routing", async () => {
+    const junk1 = new FakeOllama({ models: ["j:8b"], reply: "-232" });
+    const junk2 = new FakeOllama({ models: ["k:8b"], reply: "   " });
+    await Promise.all([junk1.start(), junk2.start()]);
+    const r = new FleetRegistry(DEFAULT_CONFIG.health);
+    const conns: Record<string, { baseUrl: string }> = { j: { baseUrl: junk1.baseUrl }, k: { baseUrl: junk2.baseUrl } };
+    r.upsert(ep("j", "j:8b", 8, junk1.baseUrl));
+    r.upsert(ep("k", "k:8b", 8, junk2.baseUrl));
+    const router = new Router(r, DEFAULT_CONFIG.routing);
+    const exec = new FailoverExecutor(r, router, (id) => conns[id] ?? null);
+    const cfg: MoaConfig = { ...DEFAULT_CONFIG.moa, enabled: true, workers: 2, parallelism: 2, minWorkers: 1 };
+    await assert.rejects(() => new MoaOrchestrator(cfg, router, exec).run({ messages: [{ role: "user", content: "hi" }] }), /usable worker answers/);
+    await Promise.all([junk1.stop(), junk2.stop()]);
+  });
+
   test("throws when fewer than minWorkers succeed (caller falls back to normal routing)", async () => {
     const r = new FleetRegistry(DEFAULT_CONFIG.health);
     r.upsert(ep("broken", "d:70b", 70, broken.baseUrl));
@@ -70,6 +114,6 @@ describe("MoA orchestrator", () => {
     const exec = new FailoverExecutor(r, router, () => ({ baseUrl: broken.baseUrl }));
     const cfg: MoaConfig = { ...DEFAULT_CONFIG.moa, enabled: true, workers: 1, parallelism: 1, minWorkers: 1 };
     const moa = new MoaOrchestrator(cfg, router, exec);
-    await assert.rejects(() => moa.run({ messages: [{ role: "user", content: "q" }] }), /workers succeeded/);
+    await assert.rejects(() => moa.run({ messages: [{ role: "user", content: "q" }] }), /usable worker answers/);
   });
 });

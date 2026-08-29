@@ -95,9 +95,13 @@ export class MoaOrchestrator {
       return outcome.result ? { model: `${cand.endpointId}/${cand.modelId}`, content: outcome.result.content } : null;
     });
 
-    const good = proposals.filter((p): p is { model: string; content: string } => p !== null);
+    // Drop degenerate worker outputs (mislabeled public endpoints echo the
+    // prompt or emit junk like "-232"), then require a real quorum.
+    const good = proposals
+      .filter((p): p is { model: string; content: string } => p !== null)
+      .filter((p) => !isDegenerate(p.content));
     if (good.length < Math.max(1, this.cfg.minWorkers)) {
-      throw new Error(`moa: only ${good.length}/${workers.length} workers succeeded (min ${this.cfg.minWorkers})`);
+      throw new Error(`moa: ${good.length}/${workers.length} usable worker answers (min ${this.cfg.minWorkers})`);
     }
 
     // Aggregate.
@@ -118,7 +122,9 @@ export class MoaOrchestrator {
       timeoutMs: this.cfg.timeoutMs,
     });
 
-    if (aggOutcome.result) {
+    // Accept the aggregator only if it produced a real answer — not empty, not
+    // our scaffolding echoed back, not junk. Otherwise use the best worker.
+    if (aggOutcome.result && !isDegenerate(aggOutcome.result.content) && !echoesScaffolding(aggOutcome.result.content)) {
       return {
         content: aggOutcome.result.content,
         aggregatorEndpoint: aggOutcome.result.endpointId,
@@ -129,7 +135,7 @@ export class MoaOrchestrator {
       };
     }
 
-    // Aggregator failed -> fall back to the best single worker proposal.
+    // Aggregator failed or returned garbage -> best coherent worker proposal.
     return {
       content: good[0]!.content,
       aggregatorEndpoint: null,
@@ -151,6 +157,25 @@ export class MoaOrchestrator {
     // Auto: strongest healthy candidate overall (may equal a worker; that's fine).
     return this.router.best();
   }
+}
+
+/** True if the aggregator echoed our aggregation scaffolding instead of answering. */
+export function echoesScaffolding(text: string): boolean {
+  return /###\s*Candidate\s+\d|Produce the single best final answer|Original user query:|Candidate responses:/i.test(text);
+}
+
+/**
+ * True if a model's answer is unusable: empty, or "text" with no real words
+ * (e.g. a stray number like "-232", punctuation, or a lone token). Answers with
+ * at least a couple of alphabetic characters are kept.
+ */
+export function isDegenerate(text: string): boolean {
+  const t = (text ?? "").trim();
+  if (t.length === 0) return true;
+  const letters = (t.match(/[A-Za-zÀ-ɏЀ-ӿ一-鿿]/g) ?? []).length;
+  // Short and essentially non-lexical (numbers/symbols only) -> junk.
+  if (t.length <= 8 && letters < 2) return true;
+  return false;
 }
 
 function buildAggregatorUserMessage(req: ChatRequest, proposals: Array<{ model: string; content: string }>): string {
