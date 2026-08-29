@@ -1,0 +1,65 @@
+{
+  "routing": {
+    "capability": 1.0,
+    "latency": 0.8,
+    "throughput": 0.5,
+    "health": 1.2,
+    "reliability": 1.0,
+    "context": 0.3
+  },
+  "health": {
+    "failureThreshold": 3,
+    "cooldownMs": 30000,
+    "recoveryThreshold": 2,
+    "requestTimeoutMs": 15000,
+    "ewmaAlpha": 0.3
+  },
+  "discovery": {
+    "enabled": true,
+    "refreshIntervalMs": 900000,
+    "healthProbeIntervalMs": 60000,
+    "concurrency": 100,
+    "seeds": ["127.0.0.1:11434"],
+    "defaultPorts": [11434],
+    "censys": {
+      "enabled": false,
+      "query": "host.services.software.product = \"ollama\" or web.software.product = \"ollama\"",
+      "htmlImports": [],
+      "apiIdEnv": "CENSYS_API_ID",
+      "apiSecretEnv": "CENSYS_API_SECRET"
+    }
+  },
+  "moa": {
+    "enabled": false,
+    "workers": 3,
+    "workerModels": [],
+    "aggregatorModel": "",
+    "parallelism": 3,
+    "timeoutMs": 45000,
+    "policy": "diverse",
+    "minWorkers": 1
+  },
+  "memory": {
+    "enabled": true,
+    "dbPath": "",
+    "topK": 5,
+    "minScore": 0.15
+  },
+  "evolution": {
+    "enabled": false,
+    "intervalMs": 3600000,
+    "minObservations": 5,
+    "workDir": "",
+    "autoApply": false
+  },
+  "providers": [
+    {
+      "id": "openrouter",
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "apiKey": "$OPENROUTER_API_KEY",
+      "models": [
+        { "id": "meta-llama/llama-3.1-70b-instruct", "sizeB": 70, "contextWindow": 131072 }
+      ]
+    }
+  ]
+}

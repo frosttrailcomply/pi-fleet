@@ -196,6 +196,8 @@ export interface FleetConfig {
    * Pi's own configured providers are unaffected and keep working normally.
    */
   providers: ProviderConfigEntry[];
+  /** Local port the OpenAI-compatible fleet gateway binds (pi talks to this). */
+  gatewayPort: number;
   /** Directory for transient runtime state (gitignored). */
   stateDir: string;
 }

@@ -59,6 +59,7 @@ export const DEFAULT_CONFIG: FleetConfig = {
     autoApply: false,
   },
   providers: [],
+  gatewayPort: 47600,
   stateDir: "",
 };
 

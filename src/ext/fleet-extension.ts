@@ -6,38 +6,31 @@
 import type { PiExtensionAPI, PiEventCtx, PiCommandCtx } from "./pi-types.ts";
 import { loadConfig } from "../engine/config.ts";
 import { FleetOrchestrator } from "../engine/orchestrator.ts";
-import { newOutput, emitText, emitError, type PushableStream } from "./stream.ts";
-import type { ChatMessage, ChatRequest } from "../engine/types.ts";
+import { FleetGateway } from "./gateway.ts";
 
 const PROVIDER = "fleet";
-
-/** Best-effort extraction of chat messages from pi's stream context. */
-function extractMessages(context: unknown): ChatMessage[] {
-  const ctx = context as { messages?: Array<{ role?: string; content?: unknown }> } | undefined;
-  const raw = ctx?.messages ?? [];
-  const out: ChatMessage[] = [];
-  for (const m of raw) {
-    const role = (m.role === "system" || m.role === "assistant" || m.role === "tool") ? m.role : "user";
-    let content = "";
-    if (typeof m.content === "string") content = m.content;
-    else if (Array.isArray(m.content)) {
-      content = m.content.map((b) => (typeof b === "string" ? b : (b as { text?: string })?.text ?? "")).join("");
-    }
-    out.push({ role, content });
-  }
-  return out;
-}
-
-function modelIdOf(model: unknown): string {
-  const m = model as { id?: string } | string | undefined;
-  return typeof m === "string" ? m : m?.id ?? "auto";
-}
 
 export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> {
   const configPath = process.env.PI_FLEET_CONFIG;
   const cfg = loadConfig(configPath);
+  // pi surfaces a provider's models only when its apiKey resolves via an env var
+  // (or auth.json). The fleet gateway needs no upstream credential, so we point
+  // at PI_FLEET_KEY and default it; the value is never sent anywhere real.
+  if (!process.env.PI_FLEET_KEY) process.env.PI_FLEET_KEY = "fleet-local";
+
   const orch = new FleetOrchestrator(cfg);
   orch.init();
+  const gateway = new FleetGateway(orch);
+  // Bind the gateway during the (awaited) factory so it is reachable before pi
+  // probes the provider's baseUrl for readiness — starting it later, in
+  // session_start, deadlocks that readiness check. Closed in session_shutdown.
+  let gatewayUp = false;
+  try {
+    await gateway.start(cfg.gatewayPort);
+    gatewayUp = true;
+  } catch (e) {
+    console.error(`[pi-fleet] gateway failed to bind port ${cfg.gatewayPort}: ${(e as Error).message}`);
+  }
 
   const modelDefs = () =>
     orch.listModels().map((m) => ({
@@ -46,50 +39,18 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
       contextWindow: m.contextWindow, maxTokens: 4096,
     }));
 
-  // --- Register the virtual `fleet` provider ---------------------------------
+  // --- Register the `fleet` provider -----------------------------------------
+  // pi talks to the local FleetGateway as an ordinary OpenAI-compatible provider;
+  // the gateway does all routing/failover/MoA internally. This keeps the
+  // integration on pi's well-supported provider path (no internal stream API).
   pi.registerProvider(PROVIDER, {
     name: "Fleet",
+    baseUrl: `http://127.0.0.1:${cfg.gatewayPort}/v1`,
     api: "openai-completions",
+    apiKey: "$PI_FLEET_KEY",
     models: modelDefs(),
     // Refresh advertised models as discovery changes the fleet.
     refreshModels: async () => modelDefs(),
-    // Resolve the whole answer via routing/MoA, then re-emit as a pi stream.
-    streamSimple: (model: unknown, context: unknown, options?: unknown) => {
-      const stream = makeStream();
-      const modelId = modelIdOf(model);
-      const signal = (options as { signal?: AbortSignal })?.signal;
-      const messages = extractMessages(context);
-      const req: ChatRequest = { messages, signal };
-      void (async () => {
-        const output = newOutput(PROVIDER, modelId);
-        try {
-          if (modelId === "moa" && cfg.moa.enabled) {
-            try {
-              const r = await orch.moaChat(req);
-              emitText(stream, output, r.content, Math.ceil(r.content.length / 4));
-              return;
-            } catch {
-              /* too few workers — fall through to auto route */
-            }
-          }
-          if (modelId !== "auto" && modelId !== "moa" && modelId.includes("/")) {
-            // Pinned discovered model "endpointId/modelId".
-            const [epId, mId] = splitOnce(modelId, "/");
-            const conn = orch.connFor(epId);
-            if (conn) {
-              const out = await orch.executor.execute(req, { query: { endpointIds: [epId], modelFilter: (m) => m.id === mId }, timeoutMs: cfg.health.requestTimeoutMs });
-              if (out.result) { emitText(stream, output, out.result.content, out.result.tokens); return; }
-            }
-          }
-          const out = await orch.chat(req);
-          if (out.result) emitText(stream, output, out.result.content, out.result.tokens);
-          else emitError(stream, output, `fleet: all ${out.attempts.length} candidates failed`);
-        } catch (e) {
-          emitError(stream, output, (e as Error).message, signal?.aborted);
-        }
-      })();
-      return stream.piStream;
-    },
   });
 
   // --- Commands --------------------------------------------------------------
@@ -150,7 +111,8 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
     await orch.start().catch(() => {});
   });
 
-  pi.on("session_shutdown", () => {
+  pi.on("session_shutdown", async () => {
+    if (gatewayUp) await gateway.stop().catch(() => {});
     orch.stop();
   });
 
@@ -175,27 +137,6 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
 
 // --- helpers -----------------------------------------------------------------
 
-interface StreamHandle { piStream: unknown; push: PushableStream["push"]; end: PushableStream["end"]; }
-
-/** A tiny event buffer that also satisfies async-iteration if pi consumes it that way. */
-function makeStream(): StreamHandle & PushableStream {
-  const events: Record<string, unknown>[] = [];
-  let done = false;
-  let notify: (() => void) | null = null;
-  const push = (ev: Record<string, unknown>) => { events.push(ev); notify?.(); };
-  const end = () => { done = true; notify?.(); };
-  const iterator = async function* () {
-    let i = 0;
-    while (!done || i < events.length) {
-      if (i < events.length) { yield events[i++]; continue; }
-      await new Promise<void>((r) => (notify = r));
-      notify = null;
-    }
-  };
-  const piStream = { push, end, [Symbol.asyncIterator]: iterator, events };
-  return { piStream, push, end };
-}
-
 function report(ctx: PiCommandCtx, msg: string): void {
   if (ctx.ui?.notify) ctx.ui.notify(msg);
   else console.log(msg);
@@ -203,9 +144,4 @@ function report(ctx: PiCommandCtx, msg: string): void {
 
 function firstLine(s: string): string {
   return (s.split("\n").find((l) => l.trim()) ?? s).slice(0, 200);
-}
-
-function splitOnce(s: string, sep: string): [string, string] {
-  const i = s.indexOf(sep);
-  return i === -1 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)];
 }
