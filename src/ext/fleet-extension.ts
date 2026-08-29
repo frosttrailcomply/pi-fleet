@@ -60,7 +60,7 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
       const s = orch.status();
       const lines = [
         `Fleet: ${s.endpoints.length} endpoints, ${s.totalModels} verified models`,
-        `MoA: ${s.moaEnabled ? "on" : "off"} | Memory: ${s.memoryLessons} lessons | Evolution: ${s.evolutionEnabled ? "on" : "off"}`,
+        `MoA: ${s.moaEnabled ? "on" : "off"} | Memory: ${s.memoryBackend} (${s.memoryLessons} lessons) | Evolution: ${s.evolutionEnabled ? "on" : "off"}`,
         ...s.endpoints.map((e) => `  ${e.health.padEnd(9)} ${e.breaker.padEnd(9)} ${String(e.models).padStart(3)}m ${String(e.latencyMs).padStart(5)}ms rel=${e.reliability} [${e.source}] ${e.id}`),
       ];
       report(ctx, lines.join("\n"));
@@ -99,7 +99,7 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
     handler: (args: string, ctx: PiCommandCtx) => {
       const text = args.trim();
       if (!text) { report(ctx, "usage: /fleet-remember <text>"); return; }
-      orch.improvement?.note("env-fact", text, ["manual"]);
+      orch.note("env-fact", text, ["manual"]);
       report(ctx, "Remembered.");
     },
   });
@@ -125,9 +125,9 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
   });
 
   // Inject relevant lessons before each agent turn.
-  pi.on("before_agent_start", (event: unknown) => {
+  pi.on("before_agent_start", async (event: unknown) => {
     const e = event as { prompt?: string; systemPrompt?: string };
-    const lessons = orch.retrieveLessons(e.prompt ?? "");
+    const lessons = await orch.retrieveLessons(e.prompt ?? "");
     if (lessons.length && pi.sendMessage) {
       const block = lessons.map((l) => `- [${l.kind}] ${l.text}`).join("\n");
       pi.sendMessage({ role: "user", content: `pi-fleet recalled lessons:\n${block}` }, { deliverAs: "nextTurn", triggerTurn: false });

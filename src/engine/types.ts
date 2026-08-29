@@ -123,6 +123,13 @@ export interface DiscoveryConfig {
     /** API id/secret env var names (never store secrets in config). */
     apiIdEnv: string;
     apiSecretEnv: string;
+    /**
+     * Keyless live scrape via an external, browser-capable fetcher (e.g.
+     * browser-search's smart-extract / CloakBrowser, or Firecrawl). The command
+     * is run with {url} substituted; its stdout (optionally a JSON field named
+     * by resultPath) is parsed for host:port pairs. No Censys API key required.
+     */
+    browser: BrowserScrapeConfig;
   };
   /** Statically configured seed endpoints (host:port or full baseUrl). */
   seeds: string[];
@@ -149,10 +156,54 @@ export interface MoaConfig {
   minWorkers: number;
 }
 
+/** Keyless browser-based scrape via an external fetcher command. */
+export interface BrowserScrapeConfig {
+  enabled: boolean;
+  /**
+   * Command + args run to fetch a URL. `{url}` is substituted in any arg.
+   * Default targets browser-search's smart-extract (CloakBrowser-backed);
+   * set BROWSER_SEARCH_DIR so the default path resolves.
+   */
+  command: string[];
+  /** Search URL template; `{query}` is URL-encoded and substituted. */
+  searchUrl: string;
+  /**
+   * Dot-path into the command's JSON stdout that holds the HTML/text to parse
+   * (e.g. "results.0.content" for smart-extract). Empty = treat stdout as raw HTML.
+   */
+  resultPath: string;
+  /** Per-invocation timeout (ms). */
+  timeoutMs: number;
+}
+
+/** Which memory backend the fleet uses. */
+export type MemoryBackendKind = "hindsight" | "native";
+
+/** Hindsight memory service connection (optional external backend). */
+export interface HindsightConfig {
+  /** Base URL of a running Hindsight service. */
+  baseUrl: string;
+  /** Bearer token env var name (never store the token itself). */
+  apiKeyEnv: string;
+  /** Namespace/agent id used to scope memories. */
+  namespace: string;
+  /** Per-request timeout (ms). */
+  timeoutMs: number;
+}
+
 /** Memory (self-improvement) tuning. */
 export interface MemoryConfig {
   enabled: boolean;
-  /** SQLite file path. */
+  /**
+   * Preferred backend. "hindsight" is the default choice; if the service is
+   * unreachable at startup the fleet transparently falls back to the native
+   * local-first SQLite store, so it always works out of the box.
+   */
+  backend: MemoryBackendKind;
+  /** Fall back to the native store when the preferred backend is unavailable. */
+  fallbackToNative: boolean;
+  hindsight: HindsightConfig;
+  /** SQLite file path (native backend). */
   dbPath: string;
   /** Max lessons returned per retrieval. */
   topK: number;

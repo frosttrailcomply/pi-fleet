@@ -12,6 +12,7 @@ import { MoaOrchestrator, type MoaResult } from "./moa/moa.ts";
 import { MemoryStore, type ScoredLesson } from "./memory/store.ts";
 import { SelfImprovement, type ToolOutcome } from "./memory/improve.ts";
 import { EvolutionEngine, type Evaluator, type GitRunner, type CycleOutcome } from "./memory/evolve.ts";
+import { HindsightBackend } from "./memory/hindsight.ts";
 
 export interface OrchestratorDeps {
   fetchImpl?: typeof fetch;
@@ -20,6 +21,8 @@ export interface OrchestratorDeps {
   now?: () => number;
   /** Skip opening the sqlite memory db (tests that don't need it). */
   memoryDbPath?: string;
+  /** Inject a pre-built Hindsight backend (tests); else built from config. */
+  hindsight?: HindsightBackend;
 }
 
 export interface FleetStatus {
@@ -27,6 +30,7 @@ export interface FleetStatus {
   totalModels: number;
   moaEnabled: boolean;
   memoryLessons: number;
+  memoryBackend: string;
   evolutionEnabled: boolean;
 }
 
@@ -39,6 +43,9 @@ export class FleetOrchestrator {
   readonly memory: MemoryStore | null;
   readonly improvement: SelfImprovement | null;
   readonly evolution: EvolutionEngine | null;
+  /** Optional remote memory backend (Hindsight). Used for retrieval + retain
+   *  when reachable; the native store always runs and drives self-evolution. */
+  remote: HindsightBackend | null = null;
   private evoTimer?: ReturnType<typeof setInterval>;
 
   constructor(public cfg: FleetConfig, private deps: OrchestratorDeps = {}) {
@@ -49,13 +56,30 @@ export class FleetOrchestrator {
     this.moa = new MoaOrchestrator(cfg.moa, this.router, this.executor);
 
     if (cfg.memory.enabled) {
+      // The native local-first store is always present: it powers self-evolution
+      // and is the guaranteed fallback when the preferred backend is unreachable.
       this.memory = new MemoryStore(deps.memoryDbPath ?? cfg.memory.dbPath, deps.now);
       this.improvement = new SelfImprovement(this.memory);
       this.evolution = new EvolutionEngine(cfg.evolution, cfg, this.registry, this.router, this.memory, deps.git);
+      if (cfg.memory.backend === "hindsight") {
+        this.remote = deps.hindsight ?? new HindsightBackend(cfg.memory.hindsight, { fetchImpl: deps.fetchImpl });
+      }
     } else {
       this.memory = null;
       this.improvement = null;
       this.evolution = null;
+    }
+  }
+
+  /** Probe the preferred remote backend; on failure fall back to native. */
+  async initMemoryBackend(): Promise<void> {
+    if (!this.remote) return;
+    const ready = await this.remote.probe().catch(() => false);
+    if (!ready) {
+      if (!this.cfg.memory.fallbackToNative) {
+        console.error("[pi-fleet] Hindsight unreachable and fallbackToNative=false; memory retrieval disabled");
+      }
+      this.remote = null; // fall back to native
     }
   }
 
@@ -118,17 +142,39 @@ export class FleetOrchestrator {
       totalModels: endpoints.reduce((a, e) => a + e.models, 0),
       moaEnabled: this.cfg.moa.enabled,
       memoryLessons: this.memory?.count() ?? 0,
+      memoryBackend: this.remote?.ready() ? "hindsight" : (this.cfg.memory.enabled ? "native" : "disabled"),
       evolutionEnabled: this.cfg.evolution.enabled,
     };
   }
 
-  /** Feed a tool outcome into self-improvement (no-op if memory disabled). */
-  observeTool(o: ToolOutcome): void {
-    this.improvement?.observeTool(o);
+  /** Which memory backend is actually active right now. */
+  activeMemoryBackend(): "hindsight" | "native" | "disabled" {
+    if (!this.cfg.memory.enabled) return "disabled";
+    return this.remote?.ready() ? "hindsight" : "native";
   }
 
-  /** Retrieve lessons relevant to a prompt for injection (empty if disabled). */
-  retrieveLessons(prompt: string, tags: string[] = []): ScoredLesson[] {
+  /**
+   * Feed a tool outcome into memory. The native self-improvement observer always
+   * runs (it drives self-evolution); when the Hindsight backend is active the
+   * outcome is also retained there for richer consolidation.
+   */
+  observeTool(o: ToolOutcome): void {
+    this.improvement?.observeTool(o);
+    if (this.remote?.ready()) void this.remote.retainToolOutcome(o);
+  }
+
+  /** Record an explicit fact/lesson into the active backend(s). */
+  note(kind: "lesson" | "env-fact", text: string, tags: string[] = [], context = ""): void {
+    this.improvement?.note(kind, text, tags, context);
+    if (this.remote?.ready()) void this.remote.retain({ kind, text, tags, context });
+  }
+
+  /**
+   * Retrieve lessons relevant to a prompt for injection. Reads from the active
+   * backend (Hindsight when reachable, else the native store).
+   */
+  async retrieveLessons(prompt: string, tags: string[] = []): Promise<ScoredLesson[]> {
+    if (this.remote?.ready()) return this.remote.retrieve(prompt, tags, this.cfg.memory.topK, this.cfg.memory.minScore);
     if (!this.improvement) return [];
     return this.improvement.retrieveForPrompt(prompt, tags, this.cfg.memory.topK, this.cfg.memory.minScore);
   }
@@ -147,6 +193,7 @@ export class FleetOrchestrator {
   /** Start background loops (discovery/health + evolution). Idempotent. */
   async start(): Promise<void> {
     this.init();
+    await this.initMemoryBackend();
     await this.refresher.start();
     if (this.evolution && this.cfg.evolution.enabled) {
       const si = this.deps.refresher?.setInterval ?? setInterval;

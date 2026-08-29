@@ -12,10 +12,13 @@
 import type { DiscoveryConfig, Endpoint, HealthConfig } from "../types.ts";
 import type { FleetRegistry } from "../registry.ts";
 import { extractFromFiles, queryCensys, censysCredsFromEnv, type HostPort } from "./censys.ts";
+import { scrapeCensysViaBrowser, type CommandRunner } from "./browser.ts";
 import { reconFleet, fetchTags } from "./probe.ts";
 
 export interface RefresherDeps {
   fetchImpl?: typeof fetch;
+  /** Override the browser-scrape command runner (tests inject a fake). */
+  commandRunner?: CommandRunner;
   /** Override for tests; defaults to real timers. */
   setInterval?: (fn: () => void, ms: number) => ReturnType<typeof setInterval>;
   clearInterval?: (h: ReturnType<typeof setInterval>) => void;
@@ -66,15 +69,20 @@ export class FleetRefresher {
 
     for (const seed of this.discovery.seeds) for (const hp of this.parseSeed(seed)) add(hp);
 
-    if (this.discovery.censys.enabled) {
-      // Saved-HTML import path (credential-free fallback).
-      if (this.discovery.censys.htmlImports.length) {
-        for (const hp of extractFromFiles(this.discovery.censys.htmlImports)) add(hp);
+    const cx = this.discovery.censys;
+    if (cx.enabled) {
+      // Saved-HTML import path (credential-free).
+      if (cx.htmlImports.length) {
+        for (const hp of extractFromFiles(cx.htmlImports)) add(hp);
       }
-      // Preferred: live Censys API when creds present.
-      const creds = censysCredsFromEnv(this.discovery.censys.apiIdEnv, this.discovery.censys.apiSecretEnv);
+      // Keyless live scrape via browser-search / CloakBrowser (default path).
+      if (cx.browser.enabled) {
+        for (const hp of await scrapeCensysViaBrowser(cx.browser, cx.query, { run: this.deps.commandRunner })) add(hp);
+      }
+      // Censys API when credentials are present (highest fidelity).
+      const creds = censysCredsFromEnv(cx.apiIdEnv, cx.apiSecretEnv);
       if (creds) {
-        for (const hp of await queryCensys(this.discovery.censys.query, creds, { signal, fetchImpl: this.deps.fetchImpl })) add(hp);
+        for (const hp of await queryCensys(cx.query, creds, { signal, fetchImpl: this.deps.fetchImpl })) add(hp);
       }
     }
     return [...found.values()];

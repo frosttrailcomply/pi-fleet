@@ -26,11 +26,20 @@ export const DEFAULT_CONFIG: FleetConfig = {
     healthProbeIntervalMs: 60_000,
     concurrency: 100,
     censys: {
-      enabled: false,
+      enabled: true,
       query: 'host.services.software.product = "ollama" or web.software.product = "ollama"',
       htmlImports: [],
       apiIdEnv: "CENSYS_API_ID",
       apiSecretEnv: "CENSYS_API_SECRET",
+      browser: {
+        enabled: true,
+        // Default: browser-search smart-extract (CloakBrowser) rendering the DOM.
+        // $BROWSER_SEARCH_DIR points at a cloned github.com/Johell1NS/browser-search.
+        command: ["node", "${BROWSER_SEARCH_DIR}/scripts/smart-extract.mjs", "{url}", "--expr", "document.documentElement.outerHTML"],
+        searchUrl: "https://platform.censys.io/search?q={query}",
+        resultPath: "results.0.content",
+        timeoutMs: 120_000,
+      },
     },
     seeds: [],
     defaultPorts: [11434],
@@ -47,6 +56,14 @@ export const DEFAULT_CONFIG: FleetConfig = {
   },
   memory: {
     enabled: true,
+    backend: "hindsight",
+    fallbackToNative: true,
+    hindsight: {
+      baseUrl: "http://127.0.0.1:8765",
+      apiKeyEnv: "HINDSIGHT_API_KEY",
+      namespace: "pi-fleet",
+      timeoutMs: 10_000,
+    },
     dbPath: "",
     topK: 5,
     minScore: 0.15,

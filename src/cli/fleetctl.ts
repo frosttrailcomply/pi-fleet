@@ -15,7 +15,7 @@ import { extractFromFiles } from "../engine/discovery/censys.ts";
 
 function printStatus(orch: FleetOrchestrator): void {
   const s = orch.status();
-  console.log(`endpoints=${s.endpoints.length} models=${s.totalModels} moa=${s.moaEnabled} memory=${s.memoryLessons} evolution=${s.evolutionEnabled}`);
+  console.log(`endpoints=${s.endpoints.length} models=${s.totalModels} moa=${s.moaEnabled} memory=${s.memoryBackend}(${s.memoryLessons}) evolution=${s.evolutionEnabled}`);
   for (const e of s.endpoints) {
     console.log(`  ${e.health.padEnd(9)} ${e.breaker.padEnd(9)} ${String(e.models).padStart(3)}m ${String(e.latencyMs).padStart(6)}ms rel=${e.reliability} [${e.source}] ${e.id}`);
   }

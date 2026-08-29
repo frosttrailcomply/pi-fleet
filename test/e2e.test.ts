@@ -32,7 +32,8 @@ describe("E2E: full fleet lifecycle (11 validation items)", () => {
     const c = structuredClone(DEFAULT_CONFIG);
     c.discovery.censys.enabled = false;
     c.discovery.seeds = [`127.0.0.1:${small.port}`, `127.0.0.1:${big.port}`];
-    c.memory = { ...c.memory, enabled: true, dbPath: join(tmp, "mem.sqlite"), minScore: 0.01 };
+    c.memory = { ...c.memory, enabled: true, backend: "native", dbPath: join(tmp, "mem.sqlite"), minScore: 0.01 };
+    c.discovery.censys.browser.enabled = false;
     c.evolution = { ...c.evolution, enabled: true, autoApply: true, minObservations: 3, workDir: join(tmp, "evo") };
     c.providers = [{ id: "external", baseUrl: external.baseUrl, models: [{ id: "gpt-oss:120b", sizeB: 120 }] }];
     return Object.assign(c, over);
@@ -149,7 +150,7 @@ describe("E2E: full fleet lifecycle (11 validation items)", () => {
     const orch = new FleetOrchestrator(cfg());
     orch.observeTool({ tool: "bash", ok: false, errorSignature: "command not found: rg" });
     orch.observeTool({ tool: "bash", ok: false, errorSignature: "command not found: rg" });
-    const hits = orch.retrieveLessons("bash rg command not found");
+    const hits = await orch.retrieveLessons("bash rg command not found");
     assert.ok(hits.some((l) => l.kind === "pitfall"), "pitfall retrievable");
     orch.stop();
   });
@@ -203,7 +204,7 @@ describe("E2E: full fleet lifecycle (11 validation items)", () => {
     // Fresh orchestrator, same config/db path -> lessons survive.
     const orch2 = new FleetOrchestrator(c);
     orch2.init();
-    const hits = orch2.retrieveLessons("where is the podman socket");
+    const hits = await orch2.retrieveLessons("where is the podman socket");
     assert.ok(hits.some((l) => /podman socket/.test(l.text)), "persisted lesson retrieved after restart");
     orch2.stop();
   });

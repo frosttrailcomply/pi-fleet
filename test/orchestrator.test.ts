@@ -47,13 +47,14 @@ describe("orchestrator integration", () => {
     orch.stop();
   });
 
-  test("observeTool + retrieveLessons round-trips through memory", () => {
+  test("observeTool + retrieveLessons round-trips through memory", async () => {
     const cfg = cfgWith({ memory: { ...DEFAULT_CONFIG.memory, enabled: true, dbPath: ":memory:", minScore: 0.01 } });
     const orch = new FleetOrchestrator(cfg, { memoryDbPath: ":memory:" });
     orch.observeTool({ tool: "bash", ok: false, errorSignature: "rg not found" });
     orch.observeTool({ tool: "bash", ok: false, errorSignature: "rg not found" });
-    const hits = orch.retrieveLessons("bash rg not found");
+    const hits = await orch.retrieveLessons("bash rg not found");
     assert.ok(hits.length >= 1);
+    assert.equal(orch.activeMemoryBackend(), "native", "native backend when Hindsight not probed");
     orch.stop();
   });
 
