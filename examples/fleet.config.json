@@ -1,4 +1,5 @@
 {
+  "gatewayPort": 47600,
   "routing": {
     "capability": 1.0,
     "latency": 0.8,
