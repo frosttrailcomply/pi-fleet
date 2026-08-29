@@ -43,6 +43,7 @@ export const DEFAULT_CONFIG: FleetConfig = {
         concurrency: 50,
         maxProxies: 20,
         refreshIntervalMs: 30 * 60_000,
+        command: ["node", "${PI_FLEET_DIR}/scripts/censys-cloak.mjs", "{url}"],
       },
       browser: {
         enabled: true,

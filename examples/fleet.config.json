@@ -39,7 +39,8 @@
         "validateTimeoutMs": 5000,
         "concurrency": 50,
         "maxProxies": 20,
-        "refreshIntervalMs": 1800000
+        "refreshIntervalMs": 1800000,
+        "command": ["node", "${PI_FLEET_DIR}/scripts/censys-cloak.mjs", "{url}"]
       },
       "browser": {
         "enabled": true,

@@ -183,6 +183,14 @@ export interface ProxyConfig {
   maxProxies: number;
   /** Re-fetch + re-validate interval (ms). */
   refreshIntervalMs: number;
+  /**
+   * Proxy-capable scrape command used when a proxy is active (the default
+   * Camofox container ignores per-request proxies, so this routes through
+   * CloakBrowser instead). `{url}` is substituted; the validated proxy is
+   * passed via the CENSYS_PROXY env. Empty = keep using the normal browser
+   * command (proxy still exported, but only effective if that command uses it).
+   */
+  command: string[];
 }
 
 /** Keyless browser-based scrape via an external fetcher command. */

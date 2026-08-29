@@ -90,12 +90,18 @@ export class FleetRefresher {
       // burn one IP into Censys' anonymous rate limit.
       if (cx.browser.enabled) {
         const env: Record<string, string> = {};
+        let scrapeCfg = cx.browser;
         if (this.proxies) {
           await this.proxies.ensureFresh();
           const proxy = this.proxies.next();
-          if (proxy) env.CENSYS_PROXY = proxy;
+          if (proxy) {
+            env.CENSYS_PROXY = proxy;
+            // The default Camofox container ignores proxies, so switch to the
+            // proxy-capable (Cloak) command when one is configured.
+            if (cx.proxy.command.length) scrapeCfg = { ...cx.browser, command: cx.proxy.command, resultPath: "" };
+          }
         }
-        for (const hp of await scrapeCensysViaBrowser(cx.browser, cx.query, { run: this.deps.commandRunner, env })) add(hp);
+        for (const hp of await scrapeCensysViaBrowser(scrapeCfg, cx.query, { run: this.deps.commandRunner, env })) add(hp);
       }
       // Censys API when credentials are present (highest fidelity).
       const creds = censysCredsFromEnv(cx.apiIdEnv, cx.apiSecretEnv);

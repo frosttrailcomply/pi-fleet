@@ -24,3 +24,6 @@ coverage/
 .DS_Store
 # large saved-HTML imports (keep out of git)
 *.censys.html
+
+# scratch/temp files
+_*

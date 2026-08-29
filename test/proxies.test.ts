@@ -137,9 +137,11 @@ describe("refresher routes the scrape through a working proxy", () => {
       browser: { ...disc.censys.browser, enabled: true, command: ["fake", "{url}"], resultPath: "" },
       proxy: cfg({ enabled: true }),
     };
+    disc.censys.proxy.command = ["cloaknode", "cloak-wrapper.mjs", "{url}"]; // proxy-capable path (distinct sentinel)
     const sampleHtml = `<a title="View 9.9.9.9:11434 Details"></a>`;
     let seenEnv: Record<string, string> | undefined;
-    const run: CommandRunner = async (_c, _a, _t, env) => { seenEnv = env; return { code: 0, stdout: sampleHtml, stderr: "" }; };
+    let seenCmd = "";
+    const run: CommandRunner = async (c, _a, _t, env) => { seenCmd = c; seenEnv = env; return { code: 0, stdout: sampleHtml, stderr: "" }; };
     const ref = new FleetRefresher(r, disc, DEFAULT_CONFIG.health, {
       commandRunner: run,
       proxyDeps: { fetchImpl: listFetch(), validator: async (rec) => ({ ok: rec.ip === "1.1.1.1", latencyMs: 1 }) },
@@ -147,5 +149,6 @@ describe("refresher routes the scrape through a working proxy", () => {
     const cands = await ref.gatherCandidates();
     assert.ok(cands.some((c) => c.host === "9.9.9.9"), "scrape still yields hosts");
     assert.equal(seenEnv?.CENSYS_PROXY, "http://1.1.1.1:8080", "only the validated working proxy is used");
+    assert.equal(seenCmd, "cloaknode", "switched to the proxy-capable command");
   });
 });
