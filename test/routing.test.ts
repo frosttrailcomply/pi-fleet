@@ -93,6 +93,22 @@ describe("failover executor", () => {
     assert.ok(r.get("good")!.stats.throughputTps > 0, "throughput recorded");
   });
 
+  test("skips a live endpoint that returns junk (bad_answer) and fails over", async () => {
+    const junk = new FakeOllama({ models: ["x:70b"], reply: "-232" }); // live but useless
+    await junk.start();
+    const r = new FleetRegistry(DEFAULT_CONFIG.health);
+    r.upsert(ep("junk", [{ id: "x:70b", sizeB: 70 }], junk.baseUrl)); // ranked first (bigger)
+    r.upsert(ep("good", [{ id: "a:8b", sizeB: 8 }], good.baseUrl));
+    const router = new Router(r, DEFAULT_CONFIG.routing);
+    const conns: Record<string, { baseUrl: string }> = { junk: { baseUrl: junk.baseUrl }, good: { baseUrl: good.baseUrl } };
+    const exec = new FailoverExecutor(r, router, (id) => conns[id] ?? null);
+    const out = await exec.execute({ messages: [{ role: "user", content: "explain heterogeneous computing in one sentence" }] });
+    assert.equal(out.result?.content, "GOOD", "routed past the junk endpoint");
+    assert.equal(out.attempts[0]!.detail, "bad_answer");
+    assert.equal(r.get("junk")!.stats.failures, 1, "junk endpoint penalized");
+    await junk.stop();
+  });
+
   test("returns null result when all candidates fail", async () => {
     const r = new FleetRegistry(DEFAULT_CONFIG.health);
     r.upsert(ep("bad", [{ id: "b:8b", sizeB: 8 }], bad.baseUrl));

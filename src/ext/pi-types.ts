@@ -15,6 +15,8 @@ export interface PiEventCtx {
     setWidget?(id: string, lines: string[]): void;
   };
   isProjectTrusted?(): boolean;
+  /** Model registry: find(providerId, modelId) -> Model object for setModel. */
+  modelRegistry?: { find?(provider: string, model: string): unknown };
 }
 
 export interface PiCommandCtx extends PiEventCtx {
@@ -40,4 +42,6 @@ export interface PiExtensionAPI {
   registerCommand(name: string, def: { description: string; handler: (args: string, ctx: PiCommandCtx) => Promise<void> | void }): void;
   registerFlag?(name: string, def: { description: string; type: "boolean" | "string"; default?: unknown }): void;
   sendMessage?(message: unknown, opts?: unknown): void;
+  /** Set the active model. Returns false if no API key. */
+  setModel?(model: unknown): Promise<boolean>;
 }

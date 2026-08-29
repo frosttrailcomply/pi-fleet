@@ -193,7 +193,9 @@ export class FleetOrchestrator {
   /** Start background loops (discovery/health + evolution). Idempotent. */
   async start(): Promise<void> {
     this.init();
-    await this.initMemoryBackend();
+    // Probe the remote memory backend in the background (native is used until
+    // it resolves) so startup never blocks on a network round-trip.
+    void this.initMemoryBackend();
     await this.refresher.start();
     if (this.evolution && this.cfg.evolution.enabled) {
       const si = this.deps.refresher?.setInterval ?? setInterval;

@@ -10,6 +10,7 @@ import type { ChatRequest, ChatResult, Candidate } from "../types.ts";
 import type { FleetRegistry } from "../registry.ts";
 import type { Router, RouteQuery } from "./router.ts";
 import { verifyModelChat } from "./chat-call.ts";
+import { isBadAnswer } from "../quality.ts";
 
 export interface ExecuteOptions {
   query?: RouteQuery;
@@ -56,9 +57,13 @@ export class FailoverExecutor {
         signal: req.signal,
       });
 
-      attempts.push({ endpointId: c.endpointId, modelId: c.modelId, ok: call.ok, detail: call.detail, latencyMs: call.latencyMs });
+      // An endpoint that answers HTTP-200 but returns junk/filler/prompt-echo
+      // (honeypots, mislabeled proxies) is treated as a failure so routing skips
+      // it and its reliability drops. Skipped when pinned (MoA does its own check).
+      const bad = call.ok && !opts.pinned && isBadAnswer(call.content, userTextOf(req));
+      attempts.push({ endpointId: c.endpointId, modelId: c.modelId, ok: call.ok && !bad, detail: bad ? "bad_answer" : call.detail, latencyMs: call.latencyMs });
 
-      if (call.ok) {
+      if (call.ok && !bad) {
         this.registry.recordSuccess(c.endpointId, call.latencyMs, call.tokens);
         return {
           result: {
@@ -73,4 +78,8 @@ export class FailoverExecutor {
     }
     return { result: null, attempts };
   }
+}
+
+function userTextOf(req: ChatRequest): string {
+  return req.messages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
 }

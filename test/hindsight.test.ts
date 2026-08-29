@@ -77,6 +77,7 @@ describe("orchestrator with Hindsight as default backend", () => {
   test("start() probes Hindsight; observe retains there; retrieve reads from it", async () => {
     const orch = new FleetOrchestrator(cfg(mock.baseUrl), { memoryDbPath: ":memory:" });
     await orch.start();
+    await orch.initMemoryBackend(); // start() probes in the background; await it here
     assert.equal(orch.activeMemoryBackend(), "hindsight");
     orch.observeTool({ tool: "bash", ok: false, errorSignature: "rg not found" });
     await new Promise((r) => setTimeout(r, 30)); // let fire-and-forget retain land

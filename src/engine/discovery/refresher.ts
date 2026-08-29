@@ -157,13 +157,14 @@ export class FleetRefresher {
     this.onChange?.();
   }
 
-  /** Start both timers (idempotent). Does an immediate first refresh. */
+  /** Start both timers (idempotent). Kicks the first refresh in the background. */
   async start(): Promise<void> {
     if (this.running || !this.discovery.enabled) return;
     this.running = true;
     const si = this.deps.setInterval ?? setInterval;
-    // Kick an immediate refresh so the fleet is populated fast.
-    await this.runFullRefresh().catch(() => {});
+    // Fire the first refresh in the background — it scrapes Censys and probes
+    // every seed, which must NOT block pi startup or this start() call.
+    void this.runFullRefresh().catch(() => {});
     this.refreshTimer = si(() => void this.runFullRefresh().catch(() => {}), this.discovery.refreshIntervalMs);
     this.healthTimer = si(() => void this.runHealthProbe().catch(() => {}), this.discovery.healthProbeIntervalMs);
     // Timers must not keep the process alive on their own.

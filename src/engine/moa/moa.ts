@@ -13,6 +13,8 @@
 import type { ChatRequest, MoaConfig, Candidate } from "../types.ts";
 import type { Router } from "../routing/router.ts";
 import type { FailoverExecutor } from "../routing/executor.ts";
+import { isDegenerate, echoesScaffolding, echoesPrompt } from "../quality.ts";
+export { isDegenerate, echoesScaffolding, echoesPrompt } from "../quality.ts";
 
 export interface MoaResult {
   content: string;
@@ -158,42 +160,6 @@ export class MoaOrchestrator {
     // Auto: strongest healthy candidate overall (may equal a worker; that's fine).
     return this.router.best();
   }
-}
-
-/** True if the aggregator echoed our aggregation scaffolding instead of answering. */
-export function echoesScaffolding(text: string): boolean {
-  return /###\s*Candidate\s+\d|Produce the single best final answer|Original user query:|Candidate responses:/i.test(text);
-}
-
-/**
- * True if an answer just parrots the user's prompt back (honeypot/echo proxies
- * repeat the prompt, often several times) rather than answering it.
- */
-export function echoesPrompt(answer: string, userText: string): boolean {
-  const u = (userText ?? "").trim().toLowerCase();
-  const a = (answer ?? "").toLowerCase();
-  if (u.length < 20) return false;
-  const key = u.slice(0, 40);
-  // Prompt fragment repeated -> parrot.
-  let idx = a.indexOf(key), count = 0;
-  while (idx !== -1) { count++; idx = a.indexOf(key, idx + key.length); }
-  if (count >= 2) return true;
-  // Answer is largely just the prompt verbatim.
-  return a.includes(u) && u.length > a.length * 0.5;
-}
-
-/**
- * True if a model's answer is unusable: empty, or "text" with no real words
- * (e.g. a stray number like "-232", punctuation, or a lone token). Answers with
- * at least a couple of alphabetic characters are kept.
- */
-export function isDegenerate(text: string): boolean {
-  const t = (text ?? "").trim();
-  if (t.length === 0) return true;
-  const letters = (t.match(/[A-Za-zÀ-ɏЀ-ӿ一-鿿]/g) ?? []).length;
-  // Short and essentially non-lexical (numbers/symbols only) -> junk.
-  if (t.length <= 8 && letters < 2) return true;
-  return false;
 }
 
 function buildAggregatorUserMessage(req: ChatRequest, proposals: Array<{ model: string; content: string }>): string {

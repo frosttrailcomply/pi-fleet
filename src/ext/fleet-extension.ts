@@ -4,6 +4,7 @@
 // engine; this file only translates between pi's API and the orchestrator.
 
 import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PiExtensionAPI, PiEventCtx, PiCommandCtx } from "./pi-types.ts";
@@ -32,6 +33,9 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
   loadFleetEnv(); // pull CAMOFOX_API_KEY / BROWSER_SEARCH_DIR from ~/.pi/agent/fleet
   const configPath = process.env.PI_FLEET_CONFIG;
   const cfg = loadConfig(configPath);
+  // Restore persisted MoA on/off state (survives restarts).
+  const persistedMoa = loadMoaState(cfg.stateDir);
+  if (persistedMoa !== null) cfg.moa.enabled = persistedMoa;
   // pi surfaces a provider's models only when its apiKey resolves via an env var
   // (or auth.json). The fleet gateway needs no upstream credential, so we point
   // at PI_FLEET_KEY and default it; the value is never sent anywhere real.
@@ -102,10 +106,14 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
 
   pi.registerCommand("fleet-moa", {
     description: "Toggle Mixture of Agents: /fleet-moa on|off",
-    handler: (args: string, ctx: PiCommandCtx) => {
+    handler: async (args: string, ctx: PiCommandCtx) => {
       const v = args.trim().toLowerCase();
       if (v === "on" || v === "off") cfg.moa.enabled = v === "on";
-      report(ctx, `MoA ${cfg.moa.enabled ? "enabled" : "disabled"} (${cfg.moa.workers} workers, policy=${cfg.moa.policy}).`);
+      saveMoaState(cfg.stateDir, cfg.moa.enabled); // persist across restarts
+      // Auto-switch the active model to match: fleet/moa when on, fleet/auto when off.
+      const target = cfg.moa.enabled ? "moa" : "auto";
+      const ok = await switchFleetModel(pi, ctx, target);
+      report(ctx, `MoA ${cfg.moa.enabled ? "enabled" : "disabled"} (${cfg.moa.workers} workers, policy=${cfg.moa.policy}).` + (ok ? ` Model → fleet/${target}.` : ""));
     },
   });
 
@@ -132,10 +140,13 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
   pi.registerFlag?.("fleet-config", { description: "Path to a fleet.config.json", type: "string" });
 
   // --- Lifecycle hooks -------------------------------------------------------
-  pi.on("session_start", async (_e: unknown, _ctx: PiEventCtx) => {
+  pi.on("session_start", async (_e: unknown, ctx: PiEventCtx) => {
     // Make sure the Camofox stealth browser is running for keyless discovery.
     if (cfg.discovery.censys.enabled && cfg.discovery.censys.browser.enabled) ensureCamofox();
-    await orch.start().catch(() => {});
+    // Fire-and-forget: discovery + probing must NOT block pi startup.
+    void orch.start().catch(() => {});
+    // If MoA was left enabled, make fleet/moa the active model on startup.
+    if (cfg.moa.enabled) void switchFleetModel(pi, ctx, "moa");
   });
 
   pi.on("session_shutdown", async () => {
@@ -180,4 +191,35 @@ function report(ctx: PiCommandCtx, msg: string): void {
 
 function firstLine(s: string): string {
   return (s.split("\n").find((l) => l.trim()) ?? s).slice(0, 200);
+}
+
+// --- MoA state persistence ---------------------------------------------------
+
+function moaStatePath(stateDir: string): string {
+  return join(stateDir, "moa.json");
+}
+
+/** Read persisted MoA on/off, or null if never set. */
+function loadMoaState(stateDir: string): boolean | null {
+  try {
+    return JSON.parse(readFileSync(moaStatePath(stateDir), "utf8")).enabled === true;
+  } catch {
+    return null;
+  }
+}
+
+function saveMoaState(stateDir: string, enabled: boolean): void {
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(moaStatePath(stateDir), JSON.stringify({ enabled }));
+  } catch { /* best-effort */ }
+}
+
+/** Switch the active model to fleet/<target> ("moa" | "auto"). */
+async function switchFleetModel(pi: PiExtensionAPI, ctx: PiEventCtx, target: "moa" | "auto"): Promise<boolean> {
+  try {
+    const model = ctx.modelRegistry?.find?.(PROVIDER, target);
+    if (model && pi.setModel) return await pi.setModel(model);
+  } catch { /* model registry not ready */ }
+  return false;
 }
