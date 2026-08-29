@@ -27,3 +27,6 @@ coverage/
 
 # scratch/temp files
 _*
+
+# legacy reference scripts (kept locally, not published)
+legacy/
