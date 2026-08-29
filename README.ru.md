@@ -1,4 +1,4 @@
-<!-- Язык: [English](README.md) · Русский · [中文](README.zh.md) · [Deutsch](README.de.md) -->
+[English](README.md) · **Русский** · [中文](README.zh.md) · [Deutsch](README.de.md)
 
 # pi-fleet
 

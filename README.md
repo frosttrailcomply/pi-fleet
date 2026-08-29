@@ -1,8 +1,21 @@
-<!-- Language: English · [Русский](README.ru.md) · [中文](README.zh.md) · [Deutsch](README.de.md) -->
+<div align="center">
 
 # pi-fleet
 
-A [Pi coding agent](https://github.com/earendil-works/pi) extension that gives Pi a **self-healing fleet of models**: it discovers OpenAI-compatible and Ollama endpoints, tracks their health, and routes each request to the best one with transparent failover. It also adds an optional **Mixture of Agents** and a **learning memory**.
+**A self-healing fleet of models for the [Pi coding agent](https://github.com/earendil-works/pi)** — discovers OpenAI-compatible and Ollama endpoints, tracks their health, and routes every request to the best one with transparent failover. Optional Mixture of Agents and a learning memory.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/Node-%E2%89%A522-339933?logo=node.js&logoColor=white)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
+[![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen.svg)](test)
+[![Built for Pi](https://img.shields.io/badge/built%20for-Pi%20coding%20agent-8A2BE2.svg)](https://github.com/earendil-works/pi)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#)
+
+**English** · [Русский](README.ru.md) · [中文](README.zh.md) · [Deutsch](README.de.md)
+
+[Install](#install) · [Configure](#configure) · [Use in Pi](#use-in-pi) · [How it works](#how-it-works) · [Test](#test)
+
+</div>
 
 Everything runs alongside Pi's own providers — they keep working unchanged. pi-fleet is a package, not a fork.
 
