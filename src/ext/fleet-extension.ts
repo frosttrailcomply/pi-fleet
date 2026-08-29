@@ -89,7 +89,12 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
   pi.registerCommand("fleet-refresh", {
     description: "Force an immediate fleet discovery + health refresh",
     handler: async (_args: string, ctx: PiCommandCtx) => {
+      // Immediate feedback, then live phase updates while the (network-bound)
+      // discovery runs — otherwise the TUI shows nothing until it finishes.
+      ctx.ui?.notify?.("Fleet: refreshing…", "info");
+      status(ctx, "Fleet: discovering endpoints (scraping Censys)…");
       const n = await orch.refresher.runFullRefresh();
+      status(ctx, `Fleet: probing health of ${orch.status().endpoints.length} endpoints…`);
       await orch.refresher.runHealthProbe();
       report(ctx, `Fleet refreshed: ${n} endpoints discovered/updated; ${orch.status().totalModels} models live.`);
     },
@@ -107,6 +112,7 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
   pi.registerCommand("fleet-evolve", {
     description: "Run one self-evolution cycle now (bounded, reversible)",
     handler: (_args: string, ctx: PiCommandCtx) => {
+      status(ctx, "Fleet: running self-evolution cycle…");
       const outcomes = orch.runEvolution();
       if (outcomes.length === 0) { report(ctx, "Evolution: disabled or no measurable weaknesses."); return; }
       report(ctx, outcomes.map((o) => `${o.accepted ? "ACCEPTED" : "kept-as-is"}: ${o.proposal.description}`).join("\n"));
@@ -158,8 +164,17 @@ export default async function fleetExtension(pi: PiExtensionAPI): Promise<void> 
 
 // --- helpers -----------------------------------------------------------------
 
+const STATUS_ID = "pi-fleet";
+
+/** Set the keyed footer status line (live feedback during a command). */
+function status(ctx: PiCommandCtx, msg: string): void {
+  try { ctx.ui?.setStatus?.(STATUS_ID, msg); } catch { /* non-TUI */ }
+}
+
+/** Emit the final result and clear any live status. */
 function report(ctx: PiCommandCtx, msg: string): void {
-  if (ctx.ui?.notify) ctx.ui.notify(msg);
+  status(ctx, "");
+  if (ctx.ui?.notify) ctx.ui.notify(msg, "info");
   else console.log(msg);
 }
 

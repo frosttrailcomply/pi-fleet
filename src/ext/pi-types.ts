@@ -7,8 +7,12 @@ export interface PiEventCtx {
   cwd: string;
   hasUI?: boolean;
   ui?: {
-    notify?(msg: string): void;
-    setStatus?(msg: string): void;
+    /** Fire-and-forget notification line. level: "info" | "warn" | "error". */
+    notify?(msg: string, level?: string): void;
+    /** Footer status line, keyed by id; pass "" to clear. */
+    setStatus?(id: string, msg: string): void;
+    /** Widget lines above the editor, keyed by id. */
+    setWidget?(id: string, lines: string[]): void;
   };
   isProjectTrusted?(): boolean;
 }

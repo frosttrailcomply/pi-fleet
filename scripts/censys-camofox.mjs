@@ -38,6 +38,20 @@ async function call(method, path, body, bearer = false) {
   return json;
 }
 
+/** "scheme://user:pass@host:port" -> camoufox proxy object. */
+function parseProxy(url) {
+  try {
+    const u = new URL(url);
+    const server = `${u.protocol}//${u.host}`;
+    const o = { server };
+    if (u.username) o.username = decodeURIComponent(u.username);
+    if (u.password) o.password = decodeURIComponent(u.password);
+    return o;
+  } catch {
+    return { server: url };
+  }
+}
+
 const ANCHOR_COUNT = `document.querySelectorAll('a[href*="/hosts/"],a[href*="/web/"]').length`;
 const OUTER_HTML = `document.documentElement.outerHTML`;
 
@@ -47,7 +61,10 @@ async function main() {
     // Pass the proxy per-session (best-effort: Camofox uses it if supported,
     // otherwise the fields are ignored and the scrape proceeds directly).
     const body = { userId: USER_ID, sessionKey: SESSION_KEY, url: URL };
-    if (PROXY) { body.proxy = PROXY; body.geoip = true; }
+    // camoufox proxy is an object {server,username,password} + geoip boolean
+    // (https://camoufox.com/python/geoip/). Best-effort: the container uses it if
+    // it wires proxies at session launch; otherwise it is ignored.
+    if (PROXY) { body.proxy = parseProxy(PROXY); body.geoip = true; }
     const tab = await call("POST", "/tabs", body, true);
     tabId = tab.tabId || tab.id;
     if (!tabId) throw new Error("no tabId in response");
