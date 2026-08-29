@@ -71,6 +71,8 @@ npm run setup:camofox          # 仅重启容器
 "resultPath": ""
 ```
 
+**代理轮换（可选）。** Censys 按 IP 限制匿名搜索，因此从同一地址频繁抓取最终会返回需要登录的页面。设置 `discovery.censys.proxy.enabled: true`，即可让抓取经由来自 [proxifly/free-proxy-list](https://github.com/proxifly/free-proxy-list) 与 [proxygenerator1/ProxyGenerator](https://github.com/proxygenerator1/ProxyGenerator) 的免费代理轮换 —— 代理池会拉取列表并**逐个验证，只保留可用的**（按速度排序）后再使用。免费代理慢且不稳定，因此默认关闭；用于无人值守的高频发现时再开启。
+
 各发现来源可叠加：`discovery.seeds`、通过 `discovery.censys.htmlImports` 导入已保存的 Censys 页面，以及设置了 `CENSYS_API_ID` / `CENSYS_API_SECRET` 时的 Censys API。发现到的主机会被探测（`/api/tags` → 一次真实的 chat completion），只有验证通过的端点才会加入舰队。一次无密钥的真实运行通过该路径发现了 70+ 个可达端点。
 
 > 只把发现指向你有权使用的端点。

@@ -20,6 +20,7 @@ const USER_ID = process.env.CAMOFOX_USER_ID || "pi-fleet-bot";
 const SESSION_KEY = process.env.CAMOFOX_SESSION_KEY || "default";
 const WAIT_MS = Number(process.env.CENSYS_SCRAPE_WAIT_MS || 25000); // max time to wait for results
 const POLL_MS = 1500;
+const PROXY = process.env.CENSYS_PROXY || ""; // e.g. http://1.2.3.4:8080 (validated upstream)
 
 async function call(method, path, body, bearer = false) {
   const headers = { "content-type": "application/json" };
@@ -43,7 +44,11 @@ const OUTER_HTML = `document.documentElement.outerHTML`;
 async function main() {
   let tabId;
   try {
-    const tab = await call("POST", "/tabs", { userId: USER_ID, sessionKey: SESSION_KEY, url: URL }, true);
+    // Pass the proxy per-session (best-effort: Camofox uses it if supported,
+    // otherwise the fields are ignored and the scrape proceeds directly).
+    const body = { userId: USER_ID, sessionKey: SESSION_KEY, url: URL };
+    if (PROXY) { body.proxy = PROXY; body.geoip = true; }
+    const tab = await call("POST", "/tabs", body, true);
     tabId = tab.tabId || tab.id;
     if (!tabId) throw new Error("no tabId in response");
 

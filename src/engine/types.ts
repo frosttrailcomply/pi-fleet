@@ -130,6 +130,12 @@ export interface DiscoveryConfig {
      * by resultPath) is parsed for host:port pairs. No Censys API key required.
      */
     browser: BrowserScrapeConfig;
+    /**
+     * Rotate free proxies (proxifly) for the scrape so repeated pulls don't burn
+     * a single IP into Censys' anonymous rate limit. Only *validated working*
+     * proxies are used.
+     */
+    proxy: ProxyConfig;
   };
   /** Statically configured seed endpoints (host:port or full baseUrl). */
   seeds: string[];
@@ -154,6 +160,29 @@ export interface MoaConfig {
   policy: "diverse" | "strongest" | "fastest";
   /** Minimum successful workers required to still aggregate. */
   minWorkers: number;
+}
+
+/** Rotating free-proxy pool (proxifly), validated before use. */
+export interface ProxyConfig {
+  enabled: boolean;
+  /**
+   * Proxy list source URLs. Each may be a JSON array of proxy records
+   * (proxifly) or plain `ip:port` / `scheme://ip:port` text lines
+   * (ProxyGenerator). Formats are auto-detected and merged.
+   */
+  sources: string[];
+  /** Protocols to keep from the list. */
+  protocols: Array<"http" | "https" | "socks4" | "socks5">;
+  /** URL used to validate a proxy works (should return 2xx/3xx quickly). */
+  validateUrl: string;
+  /** Per-proxy validation timeout (ms). */
+  validateTimeoutMs: number;
+  /** Max concurrent validations. */
+  concurrency: number;
+  /** Keep at most this many working proxies. */
+  maxProxies: number;
+  /** Re-fetch + re-validate interval (ms). */
+  refreshIntervalMs: number;
 }
 
 /** Keyless browser-based scrape via an external fetcher command. */

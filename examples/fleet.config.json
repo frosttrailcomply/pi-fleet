@@ -28,6 +28,19 @@
       "htmlImports": [],
       "apiIdEnv": "CENSYS_API_ID",
       "apiSecretEnv": "CENSYS_API_SECRET",
+      "proxy": {
+        "enabled": false,
+        "sources": [
+          "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.json",
+          "https://cdn.jsdelivr.net/gh/proxygenerator1/ProxyGenerator@main/MostStable/http.txt"
+        ],
+        "protocols": ["http"],
+        "validateUrl": "http://cp.cloudflare.com/generate_204",
+        "validateTimeoutMs": 5000,
+        "concurrency": 50,
+        "maxProxies": 20,
+        "refreshIntervalMs": 1800000
+      },
       "browser": {
         "enabled": true,
         "command": ["node", "${PI_FLEET_DIR}/scripts/censys-camofox.mjs", "{url}"],

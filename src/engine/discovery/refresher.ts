@@ -13,12 +13,17 @@ import type { DiscoveryConfig, Endpoint, HealthConfig } from "../types.ts";
 import type { FleetRegistry } from "../registry.ts";
 import { extractFromFiles, queryCensys, censysCredsFromEnv, type HostPort } from "./censys.ts";
 import { scrapeCensysViaBrowser, type CommandRunner } from "./browser.ts";
+import { ProxyPool, type ProxyPoolDeps } from "./proxies.ts";
 import { reconFleet, fetchTags } from "./probe.ts";
 
 export interface RefresherDeps {
   fetchImpl?: typeof fetch;
   /** Override the browser-scrape command runner (tests inject a fake). */
   commandRunner?: CommandRunner;
+  /** Proxy pool dependency injection (list fetch + validator) for tests. */
+  proxyDeps?: ProxyPoolDeps;
+  /** Inject a ready-made proxy pool (tests); else built from config when enabled. */
+  proxyPool?: ProxyPool;
   /** Override for tests; defaults to real timers. */
   setInterval?: (fn: () => void, ms: number) => ReturnType<typeof setInterval>;
   clearInterval?: (h: ReturnType<typeof setInterval>) => void;
@@ -29,13 +34,18 @@ export class FleetRefresher {
   private healthTimer?: ReturnType<typeof setInterval>;
   private running = false;
   private onChange?: () => void;
+  private proxies?: ProxyPool;
 
   constructor(
     private registry: FleetRegistry,
     private discovery: DiscoveryConfig,
     private health: HealthConfig,
     private deps: RefresherDeps = {},
-  ) {}
+  ) {
+    if (discovery.censys.proxy.enabled) {
+      this.proxies = deps.proxyPool ?? new ProxyPool(discovery.censys.proxy, deps.proxyDeps ?? { fetchImpl: deps.fetchImpl });
+    }
+  }
 
   /** Register a callback fired whenever the registry changes (adapter re-publishes models). */
   setOnChange(fn: () => void): void {
@@ -75,9 +85,17 @@ export class FleetRefresher {
       if (cx.htmlImports.length) {
         for (const hp of extractFromFiles(cx.htmlImports)) add(hp);
       }
-      // Keyless live scrape via browser-search / CloakBrowser (default path).
+      // Keyless live scrape via browser-search / CloakBrowser (default path),
+      // optionally through a validated rotating proxy so repeated pulls don't
+      // burn one IP into Censys' anonymous rate limit.
       if (cx.browser.enabled) {
-        for (const hp of await scrapeCensysViaBrowser(cx.browser, cx.query, { run: this.deps.commandRunner })) add(hp);
+        const env: Record<string, string> = {};
+        if (this.proxies) {
+          await this.proxies.ensureFresh();
+          const proxy = this.proxies.next();
+          if (proxy) env.CENSYS_PROXY = proxy;
+        }
+        for (const hp of await scrapeCensysViaBrowser(cx.browser, cx.query, { run: this.deps.commandRunner, env })) add(hp);
       }
       // Censys API when credentials are present (highest fidelity).
       const creds = censysCredsFromEnv(cx.apiIdEnv, cx.apiSecretEnv);

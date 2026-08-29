@@ -71,6 +71,8 @@ Jeder Fetcher, der das gerenderte HTML ausgibt, funktioniert – verweisen Sie `
 "resultPath": ""
 ```
 
+**Proxy-Rotation (optional).** Censys begrenzt anonyme Suchen pro IP, daher liefert wiederholtes Abrufen von einer Adresse irgendwann die Login-Seite. Mit `discovery.censys.proxy.enabled: true` läuft das Scraping über kostenlose Proxys aus [proxifly/free-proxy-list](https://github.com/proxifly/free-proxy-list) und [proxygenerator1/ProxyGenerator](https://github.com/proxygenerator1/ProxyGenerator) — der Pool lädt die Listen und **prüft jeden Proxy, behält nur die funktionierenden** (schnellste zuerst). Kostenlose Proxys sind langsam und unzuverlässig, daher standardmäßig aus; für unbeaufsichtigte, häufige Erkennung einschalten.
+
 Die Quellen lassen sich kombinieren: `discovery.seeds`, gespeicherte Censys-Seiten über `discovery.censys.htmlImports` und die Censys-API, wenn `CENSYS_API_ID` / `CENSYS_API_SECRET` gesetzt sind. Gefundene Hosts werden geprüft (`/api/tags` → eine echte Chat-Completion); nur verifizierte Endpunkte kommen in die Flotte. Ein schlüsselloser Live-Lauf über diesen Weg fand 70+ erreichbare Endpunkte.
 
 > Richten Sie die Erkennung nur auf Endpunkte, die Sie nutzen dürfen.

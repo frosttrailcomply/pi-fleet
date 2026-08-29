@@ -34,12 +34,12 @@ export interface RunResult {
   stderr: string;
 }
 
-export type CommandRunner = (cmd: string, args: string[], timeoutMs: number) => Promise<RunResult>;
+export type CommandRunner = (cmd: string, args: string[], timeoutMs: number, env?: Record<string, string>) => Promise<RunResult>;
 
 /** Default runner: spawn the command, capture stdout/stderr, enforce a timeout. */
-export const spawnRunner: CommandRunner = (cmd, args, timeoutMs) =>
+export const spawnRunner: CommandRunner = (cmd, args, timeoutMs, env) =>
   new Promise((resolve) => {
-    const child = spawn(cmd, args, { shell: false });
+    const child = spawn(cmd, args, { shell: false, env: env ? { ...process.env, ...env } : process.env });
     let stdout = "", stderr = "";
     const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
     child.stdout.on("data", (d) => (stdout += d));
@@ -50,6 +50,8 @@ export const spawnRunner: CommandRunner = (cmd, args, timeoutMs) =>
 
 export interface BrowserScrapeDeps {
   run?: CommandRunner;
+  /** Extra env for the command (e.g. CENSYS_PROXY for proxy rotation). */
+  env?: Record<string, string>;
 }
 
 /**
@@ -71,7 +73,7 @@ export async function scrapeCensysViaBrowser(
 
   let res: RunResult;
   try {
-    res = await run(cmd, args, cfg.timeoutMs);
+    res = await run(cmd, args, cfg.timeoutMs, deps.env);
   } catch {
     return [];
   }

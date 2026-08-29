@@ -31,6 +31,19 @@ export const DEFAULT_CONFIG: FleetConfig = {
       htmlImports: [],
       apiIdEnv: "CENSYS_API_ID",
       apiSecretEnv: "CENSYS_API_SECRET",
+      proxy: {
+        enabled: false,
+        sources: [
+          "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/http/data.json",
+          "https://cdn.jsdelivr.net/gh/proxygenerator1/ProxyGenerator@main/MostStable/http.txt",
+        ],
+        protocols: ["http"],
+        validateUrl: "http://cp.cloudflare.com/generate_204",
+        validateTimeoutMs: 5000,
+        concurrency: 50,
+        maxProxies: 20,
+        refreshIntervalMs: 30 * 60_000,
+      },
       browser: {
         enabled: true,
         // Default: pi-fleet's Camofox scraper, which drives the browser-search

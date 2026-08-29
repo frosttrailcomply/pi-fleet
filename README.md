@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522-339933?logo=node.js&logoColor=white)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](tsconfig.json)
-[![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen.svg)](test)
+[![Tests](https://img.shields.io/badge/tests-87%20passing-brightgreen.svg)](test)
 [![Built for Pi](https://img.shields.io/badge/built%20for-Pi%20coding%20agent-8A2BE2.svg)](https://github.com/earendil-works/pi)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#)
 
@@ -83,6 +83,8 @@ Any fetcher that prints rendered HTML also works — point `discovery.censys.bro
 "command": ["firecrawl", "scrape", "{url}", "--format", "html", "--wait-for", "9000"],
 "resultPath": ""
 ```
+
+**Proxy rotation (optional).** Censys rate-limits anonymous searches per IP, so repeated pulls from one address eventually return the login-gated page. Set `discovery.censys.proxy.enabled: true` to rotate the scrape through free proxies from [proxifly/free-proxy-list](https://github.com/proxifly/free-proxy-list) and [proxygenerator1/ProxyGenerator](https://github.com/proxygenerator1/ProxyGenerator) — the pool fetches the list and **validates each proxy, keeping only working ones** (fastest first) before use. Free proxies are slow and flaky, so this is off by default; enable it for unattended, high-frequency discovery.
 
 The sources compose: `discovery.seeds`, saved Censys pages via `discovery.censys.htmlImports`, and the Censys API when `CENSYS_API_ID` / `CENSYS_API_SECRET` are set. Discovered hosts are probed (`/api/tags` → a real chat completion) and only verified endpoints join the fleet. A live keyless run through this path discovered 70+ reachable endpoints.
 
