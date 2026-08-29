@@ -142,6 +142,17 @@ npm run typecheck
 
 Die End-to-End-Suite (`test/e2e.test.ts`) deckt ab: Erkennung und Refresh, Gesundheitsübergänge, Routing, transparentes Failover, Endpunkt-Erholung, Zusammenspiel lokaler und externer Provider, MoA-Erfolg und teilweisen Worker-Ausfall, Persistenz und Abruf von Lektionen, die geplanten Schleifen, Annahme und Rollback der Self-Evolution sowie einen sauberen Neustart mit persistiertem Zustand.
 
+## Danksagung
+
+Baut auf der Arbeit von:
+
+- **[browser-search](https://github.com/Johell1NS/browser-search)** von [@Johell1NS](https://github.com/Johell1NS) – der Camofox- (camoufox) / CloakBrowser-Stack, der die schlüssellose Censys-Erkennung antreibt.
+- **[Pi coding agent](https://github.com/earendil-works/pi)** von [earendil-works](https://github.com/earendil-works) – der Host-Agent, den dieses Paket erweitert.
+- **[Hindsight](https://github.com/vectorize-io/hindsight)** von [vectorize-io](https://github.com/vectorize-io) – das Standard-Gedächtnis-Backend.
+- **[Firecrawl](https://github.com/firecrawl/firecrawl)** – ein alternativer Fetcher für gerendertes HTML bei der Erkennung.
+
+Die Erkennungs-Pipeline begann als zwei Python-Skripte (`extract_ollama_hosts.py`, `ollama_recon.py`) und wurde hier nach TypeScript portiert.
+
 ## Lizenz
 
 MIT – siehe [LICENSE](LICENSE).

@@ -142,6 +142,17 @@ npm run typecheck
 
 End-to-end набор (`test/e2e.test.ts`) покрывает обнаружение и обновление, переходы состояния здоровья, маршрутизацию, прозрачный failover, восстановление эндпоинта, совместную работу локальных и внешних провайдеров, успех и частичный отказ воркеров MoA, сохранение и извлечение уроков, плановые циклы, приём и откат самоэволюции, а также чистый перезапуск с сохранённым состоянием.
 
+## Благодарности
+
+Проект опирается на работу:
+
+- **[browser-search](https://github.com/Johell1NS/browser-search)** от [@Johell1NS](https://github.com/Johell1NS) — стек Camofox (camoufox) / CloakBrowser, обеспечивающий обнаружение через Censys без ключа.
+- **[Pi coding agent](https://github.com/earendil-works/pi)** от [earendil-works](https://github.com/earendil-works) — агент, который расширяет этот пакет.
+- **[Hindsight](https://github.com/vectorize-io/hindsight)** от [vectorize-io](https://github.com/vectorize-io) — бэкенд памяти по умолчанию.
+- **[Firecrawl](https://github.com/firecrawl/firecrawl)** — альтернативный фетчер отрендеренного HTML для обнаружения.
+
+Конвейер обнаружения начинался как пара Python-скриптов (`extract_ollama_hosts.py`, `ollama_recon.py`) и был портирован на TypeScript.
+
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).

@@ -142,6 +142,17 @@ npm run typecheck
 
 端到端套件（`test/e2e.test.ts`）覆盖发现与刷新、健康状态转换、路由、透明故障转移、端点恢复、本地与外部互通、MoA 成功与部分 worker 失败、经验的持久化与召回、定时循环、自我演化的接受与回滚，以及带持久化状态的干净重启。
 
+## 致谢
+
+本项目建立在以下工作之上：
+
+- **[browser-search](https://github.com/Johell1NS/browser-search)**，作者 [@Johell1NS](https://github.com/Johell1NS) —— 提供无需密钥的 Censys 发现所依赖的 Camofox（camoufox）/ CloakBrowser 技术栈。
+- **[Pi coding agent](https://github.com/earendil-works/pi)**，来自 [earendil-works](https://github.com/earendil-works) —— 本扩展所依附的宿主 agent。
+- **[Hindsight](https://github.com/vectorize-io/hindsight)**，来自 [vectorize-io](https://github.com/vectorize-io) —— 默认记忆后端。
+- **[Firecrawl](https://github.com/firecrawl/firecrawl)** —— 用于发现的另一种渲染 HTML 抓取器。
+
+发现流程最初是一对 Python 脚本（`extract_ollama_hosts.py`、`ollama_recon.py`），在此移植为 TypeScript。
+
 ## 许可
 
 MIT —— 见 [LICENSE](LICENSE)。

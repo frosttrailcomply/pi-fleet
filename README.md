@@ -155,6 +155,17 @@ npm run typecheck
 
 The end-to-end suite (`test/e2e.test.ts`) covers discovery and refresh, health transitions, routing, transparent failover, endpoint recovery, local + external interoperability, MoA success and partial-worker failure, pitfall persistence and retrieval, the scheduled loops, self-evolution accept and rollback, and a clean restart with persisted state.
 
+## Credits
+
+Built on the work of:
+
+- **[browser-search](https://github.com/Johell1NS/browser-search)** by [@Johell1NS](https://github.com/Johell1NS) — the Camofox (camoufox) / CloakBrowser stack that powers keyless Censys discovery.
+- **[Pi coding agent](https://github.com/earendil-works/pi)** by [earendil-works](https://github.com/earendil-works) — the host agent this extends.
+- **[Hindsight](https://github.com/vectorize-io/hindsight)** by [vectorize-io](https://github.com/vectorize-io) — the default memory backend.
+- **[Firecrawl](https://github.com/firecrawl/firecrawl)** — an alternative rendered-HTML fetcher for discovery.
+
+The discovery pipeline began as a pair of Python scripts (`extract_ollama_hosts.py`, `ollama_recon.py`) and was ported to TypeScript here.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
