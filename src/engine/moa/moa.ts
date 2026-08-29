@@ -13,8 +13,8 @@
 import type { ChatRequest, MoaConfig, Candidate } from "../types.ts";
 import type { Router } from "../routing/router.ts";
 import type { FailoverExecutor } from "../routing/executor.ts";
-import { isDegenerate, echoesScaffolding, echoesPrompt } from "../quality.ts";
-export { isDegenerate, echoesScaffolding, echoesPrompt } from "../quality.ts";
+import { isBadAnswer } from "../quality.ts";
+export { isDegenerate, echoesScaffolding, echoesPrompt, isFiller } from "../quality.ts";
 
 export interface MoaResult {
   content: string;
@@ -102,7 +102,7 @@ export class MoaOrchestrator {
     const userText = req.messages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
     const good = proposals
       .filter((p): p is { model: string; content: string } => p !== null)
-      .filter((p) => !isDegenerate(p.content) && !echoesPrompt(p.content, userText));
+      .filter((p) => !isBadAnswer(p.content, userText));
     if (good.length < Math.max(1, this.cfg.minWorkers)) {
       throw new Error(`moa: ${good.length}/${workers.length} usable worker answers (min ${this.cfg.minWorkers})`);
     }
@@ -127,7 +127,7 @@ export class MoaOrchestrator {
 
     // Accept the aggregator only if it produced a real answer — not empty, not
     // our scaffolding echoed back, not junk. Otherwise use the best worker.
-    if (aggOutcome.result && !isDegenerate(aggOutcome.result.content) && !echoesScaffolding(aggOutcome.result.content) && !echoesPrompt(aggOutcome.result.content, userText)) {
+    if (aggOutcome.result && !isBadAnswer(aggOutcome.result.content, userText)) {
       return {
         content: aggOutcome.result.content,
         aggregatorEndpoint: aggOutcome.result.endpointId,

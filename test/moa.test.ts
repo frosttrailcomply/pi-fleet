@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { FleetRegistry } from "../src/engine/registry.ts";
 import { Router } from "../src/engine/routing/router.ts";
 import { FailoverExecutor } from "../src/engine/routing/executor.ts";
-import { MoaOrchestrator, isDegenerate, echoesScaffolding, echoesPrompt } from "../src/engine/moa/moa.ts";
+import { MoaOrchestrator, isDegenerate, echoesScaffolding, echoesPrompt, isFiller } from "../src/engine/moa/moa.ts";
 import { DEFAULT_CONFIG } from "../src/engine/config.ts";
 import type { Endpoint, MoaConfig } from "../src/engine/types.ts";
 import { FakeOllama } from "../src/mock/fake-ollama.ts";
@@ -79,6 +79,12 @@ describe("MoA orchestrator", () => {
     assert.equal(echoesPrompt(parrot, prompt), true);
     assert.equal(echoesPrompt("Firepoint is a company; here is what I found: ...", prompt), false);
     assert.equal(echoesPrompt("anything", "hi"), false); // short prompt -> not flagged
+    // Honeypot that quotes only a short prompt-prefix once (real failing case).
+    const q = "You are professional OSINTer. collect all available info about firepoint";
+    assert.equal(echoesPrompt(`Sure. Regarding "You are professional OSINTer.", I recommend...`, q), true);
+    // Canned filler templates (>=2 phrases).
+    assert.equal(isFiller(`I'll do my best to assist you with this. I've seen similar requests before and can offer some guidance.`), true);
+    assert.equal(isFiller(`Heterogeneous means consisting of parts of different kinds.`), false);
   });
 
   test("aggregator that echoes the prompt -> falls back to best worker", async () => {
