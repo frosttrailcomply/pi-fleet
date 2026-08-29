@@ -58,8 +58,16 @@ export const DEFAULT_CONFIG: FleetConfig = {
     workDir: "",
     autoApply: false,
   },
+  providers: [],
   stateDir: "",
 };
+
+/** Resolve "$ENV_VAR"/"${ENV_VAR}" api keys against the environment. */
+export function resolveSecret(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const m = v.match(/^\$\{?([A-Z0-9_]+)\}?$/);
+  return m ? process.env[m[1]!] : v;
+}
 
 /** Deep-merge partial overrides onto a base config (arrays replace). */
 function mergeConfig<T>(base: T, override: unknown): T {

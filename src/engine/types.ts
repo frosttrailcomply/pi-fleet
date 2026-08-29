@@ -173,6 +173,16 @@ export interface EvolutionConfig {
   autoApply: boolean;
 }
 
+/** A statically configured OpenAI-compatible provider joined into the fleet pool. */
+export interface ProviderConfigEntry {
+  id: string;
+  baseUrl: string;
+  /** Literal, or "$ENV_VAR" (resolved at load). */
+  apiKey?: string;
+  api?: EndpointApi;
+  models: Array<{ id: string; sizeB?: number; contextWindow?: number }>;
+}
+
 export interface FleetConfig {
   routing: RoutingWeights;
   health: HealthConfig;
@@ -180,6 +190,12 @@ export interface FleetConfig {
   moa: MoaConfig;
   memory: MemoryConfig;
   evolution: EvolutionConfig;
+  /**
+   * Extra OpenAI-compatible providers (local vLLM/LM Studio, or external hosted
+   * gateways) added to the routing/MoA pool alongside discovered endpoints.
+   * Pi's own configured providers are unaffected and keep working normally.
+   */
+  providers: ProviderConfigEntry[];
   /** Directory for transient runtime state (gitignored). */
   stateDir: string;
 }
